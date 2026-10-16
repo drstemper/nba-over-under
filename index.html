@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Over/Under Pool</title>
+<style>
+  /* ===================== THEME: Hardwood =====================
+     Maple floor, dark-stained rafters, court-line orange. Re-theme by editing
+     ONLY these variables. --win / --loss stay green / red so a graded pick
+     reads the same in any palette. */
+  :root {
+    --bg:       #efe3cf;   /* maple floor */
+    --surface:  #fbf6ea;   /* chalk-white paint */
+    --ink:      #2a1d12;   /* dark stain */
+    --muted:    #8a7560;   /* scuffed lacquer */
+    --accent:   #c8501e;   /* court-line orange */
+    --accent-2: #4a2f1b;   /* rafters */
+    --border:   #dccdb3;   /* board seam */
+    --track:    #eadfca;   /* empty part of a win bar */
+    --win:      #2f6b3f;
+    --win-bg:   #eef3e8;
+    --win-br:   #7d9a6a;
+    --loss:     #a8322b;
+    --loss-bg:  #f8ece8;
+    --loss-br:  #d6a49d;
+    --live-bg:  #f6f0e0;
+    --live-br:  #cdb98a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, 'Times New Roman', serif; background: var(--bg); color: var(--ink); min-height: 100vh; }
+  a { color: var(--accent); }
+
+  /* HEADER */
+  .header { background: linear-gradient(180deg, #6a4527 0%, var(--accent-2) 60%, #35210f 100%); color:#fff; border-bottom:3px solid var(--accent); }
+  .header-inner { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 1.25rem; display:flex; align-items:flex-start; justify-content:space-between; gap:1.5rem; }
+  .header-text { flex:1; min-width:0; }
+  .ball { flex:0 0 auto; width:84px; height:84px; color:var(--accent); margin-top:4px; }
+  @media (max-width:640px){ .ball { width:48px; height:48px; } .header-inner { gap:1rem; } }
+  .header-badge { display:inline-block; font-family: Arial, sans-serif; font-size:10px; letter-spacing:3px; text-transform:uppercase; color:#f0a37e; border:1px solid #f0a37e; padding:4px 12px; margin-bottom:1rem; }
+  .header h1 { font-size:2rem; font-weight:normal; line-height:1.2; }
+  .header h1 span { color:#f0a37e; }
+  .header-sub { font-family:Arial, sans-serif; font-size:13px; color:#dccdb3; margin-top:.25rem; }
+  .header-meta { display:flex; gap:2rem; flex-wrap:wrap; padding-top:1rem; margin-top:1rem; border-top:1px solid rgba(255,255,255,.15); font-family:Arial, sans-serif; font-size:12px; color:#dccdb3; }
+  .header-meta strong { color:#f0a37e; display:block; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; }
+
+  .tabs { background: #35210f; border-bottom:2px solid var(--accent); }
+  .tabs-inner { max-width:1100px; margin:0 auto; display:flex; overflow-x:auto; }
+  .tab { font-family:Arial, sans-serif; font-size:13px; letter-spacing:.5px; padding:12px 20px; cursor:pointer; color:#dccdb3; border:none; background:none; white-space:nowrap; }
+  .tab.active { color:#f0a37e; border-bottom:2px solid #f0a37e; margin-bottom:-2px; }
+  .tab:hover:not(.active){ color:#fff; }
+
+  .main { max-width:1100px; margin:0 auto; padding:1.5rem; }
+  .hidden { display:none; }
+
+  .status-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:1rem; }
+  .status-pill { display:inline-flex; align-items:center; gap:6px; font-family:Arial, sans-serif; font-size:12px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:5px 12px; }
+  .status-dot { width:7px; height:7px; border-radius:50%; background:#10b981; }
+  .status-dot.pre { background:var(--accent); }
+  .status-dot.err { background:#cc3333; }
+  .btn { font-family:Arial, sans-serif; font-size:13px; padding:9px 20px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:2px; cursor:pointer; text-decoration:none; display:inline-block; }
+  .btn-secondary { background:transparent; color:var(--ink); border-color:var(--border); }
+  .btn:hover { filter:brightness(1.08); }
+
+  .note { font-family:Arial, sans-serif; font-size:12px; color:var(--muted); line-height:1.5; background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:2px; padding:8px 12px; margin-bottom:1.25rem; }
+  .note.bad { border-left-color:var(--loss); }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:2px; overflow:hidden; margin-bottom:1.5rem; }
+  .card-header { background:var(--accent-2); color:#f0a37e; font-family:Arial, sans-serif; font-size:11px; letter-spacing:2px; text-transform:uppercase; padding:10px 16px; }
+  .card-body { padding:1rem 1.25rem; }
+  .scroll { overflow-x:auto; }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  thead th { background:#f3e9d6; font-family:Arial, sans-serif; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); padding:9px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+  tbody tr { border-bottom:1px solid #eadfca; }
+  tbody tr:hover { background:#f6eedd; }
+  tbody td { padding:10px 12px; vertical-align:middle; }
+  .num { font-family:'Courier New', monospace; font-weight:bold; text-align:right; }
+  th.num { text-align:right; }
+  .rank { font-family:Arial, sans-serif; font-size:12px; font-weight:bold; color:var(--muted); width:42px; }
+  .rank-1 { color:var(--accent); } .rank-2 { color:#9ca3af; } .rank-3 { color:#b45309; }
+  .entry-name { font-weight:bold; }
+  .dim { color:var(--muted); }
+  .entry-row { cursor:pointer; }
+
+  .chips { display:flex; flex-wrap:wrap; gap:4px; max-width:460px; }
+  .entry-row .chips { min-width:340px; }   /* keep a row's Locks on one line; the table scrolls instead */
+  .chip { font-family:Arial, sans-serif; font-size:11px; padding:2px 7px; border-radius:2px; border:1px solid var(--border); background:var(--bg); white-space:nowrap; }
+  .chip.win  { border-color:var(--win-br);  color:var(--win);  background:var(--win-bg); }
+  .chip.loss { border-color:var(--loss-br); color:var(--loss); background:var(--loss-bg); }
+  .chip.live { border-color:var(--live-br); color:#6b5824;     background:var(--live-bg); }
+  .chip.cup { display:inline-flex; align-items:center; gap:5px; }
+  .chip.cup img { width:16px; height:16px; object-fit:contain; }
+  .chevron { font-size:12px; color:var(--muted); margin-left:4px; }
+
+  .expand-row td { padding:0; border-bottom:2px solid var(--accent); }
+  .expand-row:hover { background:none; }
+  .expand-inner { padding:14px 16px; background:#f6eedd; }
+  .pick-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px,1fr)); gap:8px; }
+  .pick-card { background:var(--surface); border:1px solid var(--border); border-radius:2px; padding:8px 10px; font-family:Arial, sans-serif; font-size:12px; }
+  .pick-card.win  { border-color:var(--win-br);  background:var(--win-bg); }
+  .pick-card.loss { border-color:var(--loss-br); background:var(--loss-bg); }
+  .pick-card.live { border-color:var(--live-br); background:var(--live-bg); }
+  .pick-card .t { font-weight:bold; text-transform:uppercase; letter-spacing:.5px; font-size:12px; display:flex; align-items:center; gap:6px; }
+  .pick-card .t img { width:18px; height:18px; object-fit:contain; }
+  .pick-card .p { margin-top:3px; }
+  .pick-card .m { color:var(--muted); margin-top:2px; }
+  .lock { color:var(--accent); }
+
+  /* ===================== WIN BARS ===================== */
+  .sec-head { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:.75rem; margin:.5rem 0 .75rem; }
+  .sec-head h2 { font-weight:normal; font-size:20px; }
+  .sec-head .controls { display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap; }
+  .sec-head label { font-family:Arial, sans-serif; font-size:12px; color:var(--muted); }
+  .sec-head label.chk { cursor:pointer; color:var(--ink); display:inline-flex; align-items:center; gap:6px; }
+  .sec-head label.chk input { accent-color:var(--accent); width:15px; height:15px; cursor:pointer; }
+  .sec-head select { font-family:Arial, sans-serif; font-size:13px; padding:5px 8px; margin-left:6px; border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:2px; }
+
+  .legend { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; font-family:Arial, sans-serif; font-size:12px; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:2px; padding:8px 12px; margin-bottom:1rem; }
+  .legend .who { display:inline-flex; align-items:center; gap:5px; cursor:pointer; background:none; border:1px solid transparent; border-radius:14px; padding:2px 8px 2px 2px; font:inherit; color:var(--ink); }
+  .legend .who:hover { border-color:var(--border); }
+  .legend .who.on { border-color:var(--accent); background:#f6eedd; }
+  .legend .sep { flex-basis:100%; height:0; }
+  .legend .key { display:inline-flex; align-items:center; gap:5px; }
+
+  .bars { display:grid; grid-template-columns:repeat(auto-fill, minmax(440px, 1fr)); gap:12px; margin-bottom:1.5rem; }
+  @media (max-width:520px){ .bars { grid-template-columns:1fr; } }
+  .bar-card { background:var(--surface); border:1px solid var(--border); border-radius:2px; padding:10px 14px 10px; }
+  .bar-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .bar-name { display:flex; align-items:center; gap:8px; font-weight:bold; min-width:0; }
+  .bar-name img { width:24px; height:24px; object-fit:contain; flex:0 0 auto; }
+  .bar-rec { font-family:'Courier New', monospace; font-weight:bold; font-size:15px; white-space:nowrap; }
+
+  /* The lane and the track share one width, so a column that is line/82 of the
+     lane ends exactly where the tick sits on the track. Under pickers pile up
+     on the left of the tick, Over pickers on the right. */
+  .lane { display:grid; margin-top:6px; min-height:6px; align-items:end; }
+  .lane-u { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; padding-right:5px; }
+  .lane-o { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:4px; padding-left:5px; }
+  .lane-u:empty, .lane-o:empty { display:none; }
+  .lane-u:empty + .lane-o { grid-column:2; }
+
+  .track { position:relative; height:12px; background:var(--track); border-radius:6px; margin-top:5px; }
+  .seg { position:absolute; top:0; bottom:0; }
+  .seg-base { left:0; background:var(--accent); border-radius:6px 0 0 6px; }
+  .seg-over { background:var(--win); border-radius:0 6px 6px 0; }
+  .seg-base.full { border-radius:6px; }
+  .half { position:absolute; top:3px; bottom:3px; width:1px; background:rgba(42,29,18,.2); }
+  .tick { position:absolute; top:-7px; bottom:-7px; width:3px; margin-left:-1.5px; background:var(--ink); border-radius:1px; }
+  .bar-foot { display:flex; justify-content:space-between; gap:8px; margin-top:8px; font-family:Arial, sans-serif; font-size:11px; color:var(--muted); }
+  .bar-foot b { color:var(--ink); }
+
+  .badge { position:relative; display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; padding:0 4px; border-radius:12px; border:2px solid var(--live-br); background:var(--live-bg); color:#6b5824; font-family:Arial, sans-serif; font-size:10px; font-weight:bold; cursor:default; }
+  .badge.win    { background:var(--win);  border-color:var(--win);  color:#fff; }
+  .badge.loss   { background:var(--loss); border-color:var(--loss); color:#fff; }
+  .badge.ahead  { background:var(--win-bg);  border-color:var(--win);  color:var(--win); }
+  .badge.behind { background:var(--loss-bg); border-color:var(--loss); color:var(--loss); }
+  .badge.lg-mini { cursor:inherit; }
+  .badge .lk { position:absolute; top:-7px; right:-7px; width:14px; height:14px; border-radius:50%; background:var(--accent); border:1.5px solid var(--surface); display:flex; align-items:center; justify-content:center; }
+  .badge .lk svg { width:8px; height:8px; fill:#fff; }
+  .bars.focusing .badge { opacity:.18; }
+  .bars.focusing .badge.focused { opacity:1; }
+
+  .help, .rules { font-family:Arial, sans-serif; font-size:13px; line-height:1.6; }
+  .rules h3 { font-family:Georgia, serif; font-weight:normal; font-size:17px; margin:1rem 0 .3rem; }
+  .rules h3:first-child { margin-top:0; }
+  .rules ul { margin-left:1.2rem; }
+  .rules code { background:#f3e9d6; padding:1px 5px; border-radius:3px; }
+  .loading, .no-data { font-family:Arial, sans-serif; color:var(--muted); padding:2rem; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="header-text">
+      <div class="header-badge">Over / Under Wins Pool</div>
+      <h1>The NBA <span>Over/Under</span> Pool</h1>
+      <div class="header-sub">All 30 teams &middot; Over or Under the win line &middot; 3 Locks &middot; one Cup pick</div>
+      <div class="header-meta">
+        <div><strong>Season</strong>2026&ndash;27</div>
+        <div><strong>Format</strong>Over or Under on every team</div>
+        <div><strong>Scoring</strong>1 pt a pick &middot; Lock = 2 &middot; Cup winner = 3</div>
+      </div>
+    </div>
+
+    <!-- basketball — original SVG, inherits --accent via currentColor -->
+    <svg class="ball" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Basketball">
+      <g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round">
+        <circle cx="50" cy="50" r="44"/>
+        <path d="M50 6 V94"/>
+        <path d="M6 50 H94"/>
+        <path d="M18 18 C34 34 34 66 18 82"/>
+        <path d="M82 18 C66 34 66 66 82 82"/>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<div class="tabs"><div class="tabs-inner">
+  <button class="tab active" id="tab-season" onclick="showTab('season')">Season</button>
+  <button class="tab" id="tab-rules" onclick="showTab('rules')">Rules</button>
+</div></div>
+
+<div class="main">
+
+  <!-- ===================== SEASON ===================== -->
+  <div id="view-season">
+    <div class="status-bar">
+      <span class="status-pill"><span class="status-dot pre" id="s-dot"></span><span id="s-text">Loading…</span></span>
+      <span style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+        <span class="status-pill" id="s-refresh">&mdash;</span>
+        <button class="btn btn-secondary" onclick="loadSeason()">↻ Refresh</button>
+        <a class="btn hidden" id="s-form" target="_blank" rel="noopener">Submit your picks</a>
+      </span>
+    </div>
+    <div id="s-note"></div>
+    <div id="s-standings"></div>
+
+    <div id="s-bars-wrap" class="hidden">
+      <div class="sec-head">
+        <h2>Team by team</h2>
+        <div class="controls">
+          <label class="chk"><input type="checkbox" id="hide-settled"> Hide settled teams</label>
+          <label>Sort by
+            <select id="bar-sort">
+              <option value="name">Team name</option>
+              <option value="line">Win line</option>
+              <option value="w">Current wins</option>
+              <option value="margin">Pace vs. line</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="legend" id="bar-legend"></div>
+      <div id="s-teams"></div>
+    </div>
+  </div>
+
+  <!-- ===================== RULES ===================== -->
+  <div id="view-rules" class="hidden">
+    <div class="card"><div class="card-header">How it works</div>
+      <div class="card-body rules">
+        <h3>The picks</h3>
+        <ul>
+          <li>Every team has a win line (e.g. <code>Oklahoma City Thunder &ndash; O/U 62.5</code>). Pick <b>Over</b> or <b>Under</b> for all 30 teams.</li>
+          <li>Pick <b>3 Locks</b>. A Lock is a team you&rsquo;re extra sure about &mdash; it uses your Over/Under pick for that team.</li>
+          <li>Pick the winner of the in-season tournament (the NBA Cup).</li>
+        </ul>
+        <h3>The points</h3>
+        <ul>
+          <li><b>1 point</b> for each correct Over/Under.</li>
+          <li><b>2 points</b> instead of 1 when a correct pick is also a Lock. A wrong Lock scores 0 &mdash; there is no penalty.</li>
+          <li><b>3 points</b> for picking the Cup winner.</li>
+          <li>Most points wins; the maximum is 36. Lines end in .5, so there are no pushes. Ties share a rank.</li>
+        </ul>
+        <h3>During the season</h3>
+        <p>The standings show two numbers. <b>Locked in</b> counts picks that can no longer change &mdash; an Over is locked in once the team passes the line, an Under once the team can&rsquo;t reach it. <b>On pace</b> adds the open picks that are currently tracking to win, using each team&rsquo;s win rate extended to 82 games.</p>
+        <h3>Reading the win bars</h3>
+        <ul>
+          <li>Each bar fills to the team&rsquo;s current wins, out of 82. The dark tick is the win line; the bar turns green once a team passes it.</li>
+          <li>Badges show who picked what. <b>Left of the tick is Under, right of the tick is Over.</b> A small orange padlock means that pick is a Lock.</li>
+          <li>Badge colour is how the pick is doing: solid green or red once it&rsquo;s settled, light green or red while it&rsquo;s still open and currently on or off pace.</li>
+          <li>Tap a name in the key to highlight just that person&rsquo;s picks.</li>
+          <li>&ldquo;Hide settled teams&rdquo; removes every team whose line is already decided (it has passed the line, or can no longer reach it), leaving only the teams still in play.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — per-season values. Everything else is derived from the
+   sheet's column headers, so the lines live in exactly one place:
+   the Google Form (questions named "Team Name - O/U 46.5").
+   ============================================================ */
+
+const SEASON = {
+  label:    '2026-27',
+  espnYear: 2027,                 // ESPN labels a season by the year it ends
+  // Published CSV of the 2026-27 form responses
+  // (File → Share → Publish to web → the responses tab → CSV).
+  sheetUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTqcgLgd6JsnnZw9UHuE1PmN5Q_O_KAb2REXlilzgHAyCg3lOBEu1SE8tHsUVElqMJnUxXFxY7EqDBV/pub?gid=1644992514&single=true&output=csv',
+  // Public link to the 2026-27 Google Form.
+  formUrl:  'https://docs.google.com/forms/d/e/1FAIpQLSfz5CbGjOFG3lKH8h5ieCBiIbz2vvPGzH-su-52MFH3ksDvdQ/viewform',
+  // Picks stay hidden until this moment (ISO 8601, with offset), e.g.
+  // '2026-10-20T19:00:00-04:00'. Leave null to keep them hidden until you set it.
+  // This hides picks in the UI only — the published CSV itself is public.
+  deadline: '2026-10-20T19:00:00-04:00',
+  // Winner of the in-season tournament, as an ESPN abbreviation (e.g. 'OKC').
+  // Set it after the Cup final in December; leave null until then.
+  cupWinner: null
+};
+
+const GAMES = 82;
+const REFRESH = 5 * 60 * 1000;
+
+/* ============================================================
+   TEAMS — ESPN abbreviation, display name, and the spellings people
+   actually type into a free-text Lock box ("Wolves", "Mavs ", "OKC").
+   Aliases of 3 characters or fewer must match a whole word.
+   ============================================================ */
+const TEAMS = [
+  ['ATL','Atlanta Hawks',['atlanta','hawks','atl']],
+  ['BOS','Boston Celtics',['boston','celtics','bos']],
+  ['BKN','Brooklyn Nets',['brooklyn','nets','bkn']],
+  ['CHA','Charlotte Hornets',['charlotte','hornets','cha']],
+  ['CHI','Chicago Bulls',['chicago','bulls','chi']],
+  ['CLE','Cleveland Cavaliers',['cleveland','cavaliers','cavs','cle']],
+  ['DAL','Dallas Mavericks',['dallas','mavericks','mavs','dal']],
+  ['DEN','Denver Nuggets',['denver','nuggets','den']],
+  ['DET','Detroit Pistons',['detroit','pistons','det']],
+  ['GS','Golden State Warriors',['goldenstate','warriors','dubs','gsw','gs']],
+  ['HOU','Houston Rockets',['houston','rockets','hou']],
+  ['IND','Indiana Pacers',['indiana','pacers','ind']],
+  ['LAC','Los Angeles Clippers',['clippers','lac']],
+  ['LAL','Los Angeles Lakers',['lakers','lal']],
+  ['MEM','Memphis Grizzlies',['memphis','grizzlies','grizz','mem']],
+  ['MIA','Miami Heat',['miami','heat','mia']],
+  ['MIL','Milwaukee Bucks',['milwaukee','bucks','mil']],
+  ['MIN','Minnesota Timberwolves',['minnesota','timberwolves','wolves','min']],
+  ['NO','New Orleans Pelicans',['neworleans','pelicans','pels','nop']],
+  ['NY','New York Knicks',['newyork','knicks','nyk','ny']],
+  ['OKC','Oklahoma City Thunder',['oklahoma','thunder','okc']],
+  ['ORL','Orlando Magic',['orlando','magic','orl']],
+  ['PHI','Philadelphia 76ers',['philadelphia','76ers','sixers','phi']],
+  ['PHX','Phoenix Suns',['phoenix','suns','phx']],
+  ['POR','Portland Trail Blazers',['portland','trailblazers','blazers','por']],
+  ['SAC','Sacramento Kings',['sacramento','kings','sac']],
+  ['SA','San Antonio Spurs',['sanantonio','spurs','sas']],
+  ['TOR','Toronto Raptors',['toronto','raptors','tor']],
+  ['UTAH','Utah Jazz',['utah','jazz']],
+  ['WSH','Washington Wizards',['washington','wizards','wsh','was']]
+];
+const TEAM_NAME = {}; TEAMS.forEach(t => TEAM_NAME[t[0]] = t[1]);
+
+const compact = s => (s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+
+// Longest matching alias wins, so "Charlotte Hornets" is the Hornets and
+// not the Nets, and "Los Angeles Clippers" is the Clippers.
+function teamFrom(text){
+  const c = compact(text);
+  const words = (text||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  let best = null, bestLen = 0;
+  TEAMS.forEach(([ab,,aliases]) => aliases.forEach(a => {
+    const hit = a.length > 3 ? c.includes(a) : words.includes(a);
+    if (hit && a.length > bestLen){ best = ab; bestLen = a.length; }
+  }));
+  return best;
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const logo = ab => 'https://a.espncdn.com/i/teamlogos/nba/500/' + ab.toLowerCase() + '.png';
+const logoImg = ab => '<img src="' + logo(ab) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">';
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
+
+function fetchWithTimeout(url, opts, ms){
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms || 8000);
+  return fetch(url, Object.assign({}, opts, {signal: ctl.signal})).finally(() => clearTimeout(t));
+}
+// Direct first, then a public CORS proxy. The proxy can stall rather than
+// fail, so every call carries a hard deadline.
+async function fetchText(url, noStore){
+  for (const u of [url, 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)]){
+    try {
+      const r = await fetchWithTimeout(u, noStore ? {cache:'no-store'} : {}, 8000);
+      if (!r.ok) continue;
+      const t = await r.text();
+      if (t && !t.trim().startsWith('<')) return t;
+    } catch(e){}
+  }
+  return null;
+}
+
+function parseCSV(text){
+  const rows = []; let row = [], field = '', q = false;
+  for (let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if (q){ if (ch === '"'){ if (text[i+1] === '"'){ field += '"'; i++; } else q = false; } else field += ch; }
+    else { if (ch === '"') q = true; else if (ch === ',') { row.push(field); field = ''; } else if (ch === '\n'){ row.push(field); rows.push(row); row = []; field = ''; } else if (ch === '\r'){} else field += ch; }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+
+/* ============================================================
+   SHEET → ENTRIES
+   Columns are found by header text, not position:
+     "<Team> - O/U 46.5"   → a team and its line
+     "Lock 1" … "Lock 3"   → free text, matched to a team by teamFrom()
+     "…Tournament…"/"Cup"  → free text, matched to a team
+     "Name", "Timestamp"
+   Anything else ("Column 36", stray notes) is ignored.
+   ============================================================ */
+function parseSheet(text){
+  const rows = parseCSV(text || '');
+  if (!rows.length) return null;
+  const hdrs = rows[0].map(h => h.trim());
+  const teamCols = [], lockCols = [];
+  let nameCol = -1, tsCol = -1, cupCol = -1;
+  hdrs.forEach((h, i) => {
+    const m = /o\/u\s*([\d.]+)/i.exec(h);
+    if (m){
+      const ab = teamFrom(h.split(/-\s*o\/u/i)[0]);
+      if (ab) teamCols.push({i, ab, line: parseFloat(m[1])});
+    }
+    else if (/^lock/i.test(h)) lockCols.push(i);
+    else if (/tournament|cup/i.test(h)) cupCol = i;
+    else if (/^name/i.test(h) && nameCol < 0) nameCol = i;
+    else if (/timestamp/i.test(h)) tsCol = i;
+  });
+  if (!teamCols.length) return null;
+
+  const lines = {};
+  teamCols.forEach(t => lines[t.ab] = t.line);
+
+  const latest = {};
+  rows.slice(1).forEach((r, idx) => {
+    const name = (r[nameCol] || '').trim();
+    if (!name) return;
+    const picks = {};
+    teamCols.forEach(t => {
+      const v = (r[t.i] || '').trim().toLowerCase();
+      if (v.startsWith('o')) picks[t.ab] = 'over';
+      else if (v.startsWith('u')) picks[t.ab] = 'under';
+    });
+    const locks = [];
+    lockCols.forEach(i => { const ab = teamFrom(r[i] || ''); if (ab && !locks.includes(ab)) locks.push(ab); });
+    const ts = tsCol >= 0 ? Date.parse(r[tsCol]) : NaN;
+    const e = { name, picks, locks, cup: cupCol >= 0 ? teamFrom(r[cupCol] || '') : null,
+                at: isNaN(ts) ? idx : ts };
+    // A resubmission replaces the earlier one (the latest timestamp wins).
+    const k = name.toLowerCase();
+    if (!latest[k] || e.at >= latest[k].at) latest[k] = e;
+  });
+  return { lines, teams: teamCols.map(t => t.ab), entries: Object.values(latest) };
+}
+
+/* ============================================================
+   GRADING
+   res = { w, l } for a team. A pick is settled ("win"/"loss") as soon as the
+   outcome can no longer change, and "ahead"/"behind" while it's still open.
+   ============================================================ */
+function statusFor(pick, line, res){
+  if (!pick || !res) return 'none';
+  const gp = res.w + res.l, maxW = GAMES - res.l;
+  if (gp >= GAMES && res.w === line) return 'push';
+  let settled = null;                                  // 'over' / 'under' / null
+  if (res.w > line) settled = 'over';
+  else if (maxW < line) settled = 'under';
+  if (settled) return settled === pick ? 'win' : 'loss';
+  if (!gp) return 'none';
+  const pace = res.w / gp * GAMES;
+  return (pace > line) === (pick === 'over') ? 'ahead' : 'behind';
+}
+
+function calcEntry(e, ctx){
+  let locked = 0, pace = 0, correct = 0, lockHits = 0;
+  const rows = ctx.teams.map(ab => {
+    const pick = e.picks[ab], isLock = e.locks.includes(ab) && !!pick;
+    const st = statusFor(pick, ctx.lines[ab], ctx.res[ab]);
+    const v = isLock ? 2 : 1;
+    if (st === 'win'){ locked += v; pace += v; correct++; if (isLock) lockHits++; }
+    else if (st === 'ahead') pace += v;
+    return { ab, pick, isLock, st };
+  });
+  const cup = ctx.cup && e.cup === ctx.cup ? 3 : 0;
+  return { locked: locked + cup, pace: pace + cup, correct, lockHits, cup, rows };
+}
+
+function rankRows(list, key, order){
+  list.sort((a, b) => b[key] - a[key] || b[order] - a[order] || a.e.name.localeCompare(b.e.name));
+  let prev = null, rk = 0;
+  list.forEach((x, i) => {
+    if (!prev || x[key] !== prev[key]) rk = i + 1;      // ties on points share a rank
+    x.rank = rk; prev = x;
+  });
+  list.forEach((x, i) => { x.tied = list.some((y, j) => j !== i && y.rank === x.rank); });
+  return list;
+}
+
+/* ============================================================
+   STANDINGS TABLE
+   ctx = { teams, lines, res, entries, cup }
+   ============================================================ */
+let expanded = null;   // name of the expanded entrant
+
+function pickCard(r, ctx){
+  const res = ctx.res[r.ab], line = ctx.lines[r.ab];
+  if (!r.pick) return '<div class="pick-card"><div class="t">' + logoImg(r.ab) + esc(r.ab) + '</div><div class="m">no pick</div></div>';
+  const rec = res ? res.w + '-' + res.l : '—';
+  const cls = {win:'win', loss:'loss', ahead:'live', behind:'live'}[r.st] || '';
+  const verdict = r.st === 'ahead' ? ' · on pace' : r.st === 'behind' ? ' · off pace' : '';
+  return '<div class="pick-card ' + cls + '">'
+    + '<div class="t">' + logoImg(r.ab) + esc(TEAM_NAME[r.ab] || r.ab) + (r.isLock ? ' <span class="lock" title="Lock">★</span>' : '') + '</div>'
+    + '<div class="p"><b>' + cap(r.pick) + '</b> ' + line + '</div>'
+    + '<div class="m">' + rec + verdict + '</div></div>';
+}
+
+function renderStandings(ctx, title){
+  const el = $('s-standings');
+  if (!ctx.entries.length){ el.innerHTML = '<div class="card"><div class="card-header">' + title + '</div><div class="no-data">No entries yet.</div></div>'; return; }
+  const list = ctx.entries.map(e => Object.assign({ e }, calcEntry(e, ctx)));
+  rankRows(list, 'pace', 'locked');
+
+  let html = '<div class="card"><div class="card-header">' + title + '</div><div class="scroll"><table><thead><tr>'
+    + '<th>#</th><th>Entrant</th><th class="num">On pace</th><th class="num">Locked in</th>'
+    + '<th class="num">Correct</th><th>Locks</th><th>Cup pick</th></tr></thead><tbody>';
+  list.forEach(x => {
+    const lockChips = x.e.locks.map(ab => {
+      const r = x.rows.find(q => q.ab === ab);
+      const cls = !r ? '' : {win:'win', loss:'loss', ahead:'live', behind:'live'}[r.st] || '';
+      return '<span class="chip ' + cls + '">★ ' + esc(ab) + ' ' + (r && r.pick ? cap(r.pick) : '') + '</span>';
+    }).join('');
+    const cupChip = x.e.cup
+      ? '<span class="chip cup ' + (ctx.cup ? (x.e.cup === ctx.cup ? 'win' : 'loss') : '') + '" title="' + esc(TEAM_NAME[x.e.cup] || x.e.cup) + '">' + logoImg(x.e.cup) + esc(x.e.cup) + '</span>'
+      : '<span class="dim">—</span>';
+    const open = expanded === x.e.name;
+    html += '<tr class="entry-row" data-name="' + esc(x.e.name) + '">'
+      + '<td class="rank rank-' + x.rank + '">' + (x.tied ? 'T' : '') + x.rank + '</td>'
+      + '<td><div class="entry-name">' + esc(x.e.name) + '<span class="chevron">' + (open ? '▲' : '▼') + '</span></div></td>'
+      + '<td class="num">' + x.pace + '</td><td class="num">' + x.locked + '</td>'
+      + '<td class="num">' + x.correct + '/' + ctx.teams.length + '</td>'
+      + '<td><div class="chips">' + lockChips + '</div></td>'
+      + '<td>' + cupChip + '</td></tr>';
+    if (open){
+      html += '<tr class="expand-row"><td colspan="7"><div class="expand-inner"><div class="pick-grid">'
+        + x.rows.map(r => pickCard(r, ctx)).join('') + '</div></div></td></tr>';
+    }
+  });
+  html += '</tbody></table></div></div>';
+  el.innerHTML = html;
+  el.querySelectorAll('.entry-row').forEach(tr => tr.onclick = () => {
+    expanded = expanded === tr.dataset.name ? null : tr.dataset.name;
+    renderStandings(ctx, title);
+  });
+}
+
+/* ============================================================
+   WIN BARS
+   One card per team: a bar filled to current wins (out of 82), a tick at the
+   line, and a badge for everyone's pick — Unders left of the tick, Overs right,
+   a padlock on the badge when that pick is a Lock.
+   ============================================================ */
+let barSort = 'name';
+let hideSettled = false;   // "Hide settled teams" checkbox
+let focusName = null;      // legend click highlights one entrant's picks
+
+// Short, unique badge text per entrant: "Ben P" → BP, "Dave" → D, and if two
+// names would collide they grow ("Dan" / "Dave" → DA / DA → DAN / DAV).
+function makeInitials(names){
+  const cands = n => {
+    const w = n.trim().split(/\s+/), letters = n.replace(/[^A-Za-z0-9]/g, '');
+    return [w.length > 1 ? w[0][0] + w[1][0] : w[0][0], letters.slice(0, 2), letters.slice(0, 3), letters]
+      .map(s => s.toUpperCase());
+  };
+  const out = {}, used = new Set();
+  for (let tier = 0; tier < 4; tier++){
+    const pending = names.filter(n => !(n in out));
+    pending.forEach(n => {
+      const c = cands(n)[tier];
+      const clash = names.some(o => o !== n && (o in out ? out[o] === c : cands(o)[tier] === c));
+      if (!clash && !used.has(c)){ out[n] = c; used.add(c); }
+    });
+  }
+  names.forEach(n => { if (!(n in out)){ let c = cands(n)[3] || '?', k = 2; while (used.has(c)) c = cands(n)[3] + k++; out[n] = c; used.add(c); } });
+  return out;
+}
+
+const LOCK_SVG = '<span class="lk" title="Lock"><svg viewBox="0 0 24 24"><path d="M17 9V7a5 5 0 0 0-10 0v2H5v13h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7z"/></svg></span>';
+
+function badge(e, pick, st, isLock, ini, extra){
+  const cls = {win:'win', loss:'loss', ahead:'ahead', behind:'behind'}[st] || '';
+  const verdict = {win:'settled — right', loss:'settled — wrong', ahead:'on pace to be right', behind:'off pace'}[st] || '';
+  const tip = e.name + ' — ' + cap(pick) + (isLock ? ' (Lock)' : '') + (verdict ? ' · ' + verdict : '');
+  return '<span class="badge ' + cls + (focusName === e.name ? ' focused' : '') + (extra || '') + '" title="' + esc(tip) + '">'
+    + esc(ini[e.name]) + (isLock ? LOCK_SVG : '') + '</span>';
+}
+
+function renderLegend(ctx, ini, revealed){
+  const el = $('bar-legend');
+  if (!revealed){
+    el.innerHTML = '<span class="key"><b>' + ctx.entries.length + '</b>&nbsp;entered — pick badges appear here after the deadline.</span>';
+    return;
+  }
+  const names = ctx.entries.map(e => e.name).sort((a, b) => a.localeCompare(b));
+  el.innerHTML = names.map(n =>
+      '<button class="who' + (focusName === n ? ' on' : '') + '" data-name="' + esc(n) + '">'
+      + '<span class="badge lg-mini">' + esc(ini[n]) + '</span>' + esc(n) + '</button>').join('')
+    + '<span class="sep"></span>'
+    + '<span class="key">◀ Under | Over ▶ either side of the tick</span>'
+    + '<span class="key"><span class="badge lg-mini" style="min-width:18px;height:18px;font-size:0;">' + LOCK_SVG + '</span>&nbsp;Lock</span>'
+    + '<span class="key"><span class="badge ahead lg-mini" style="min-width:14px;height:14px;padding:0"></span>on pace'
+    + '&nbsp;<span class="badge behind lg-mini" style="min-width:14px;height:14px;padding:0"></span>off pace</span>'
+    + '<span class="key"><span class="badge win lg-mini" style="min-width:14px;height:14px;padding:0"></span>/<span class="badge loss lg-mini" style="min-width:14px;height:14px;padding:0"></span>settled</span>';
+  el.querySelectorAll('.who').forEach(b => b.onclick = () => {
+    focusName = focusName === b.dataset.name ? null : b.dataset.name;
+    renderTeams(ctx, true);
+  });
+}
+
+function renderTeams(ctx, revealed){
+  const ini = makeInitials(ctx.entries.map(e => e.name));
+  renderLegend(ctx, ini, revealed);
+
+  const rows = ctx.teams.map(ab => {
+    const r = ctx.res[ab] || { w: 0, l: 0 }, line = ctx.lines[ab];
+    const gp = r.w + r.l, proj = gp ? r.w / gp * GAMES : null;
+    // Settled = the line is decided whichever way anyone picked.
+    const settled = statusFor('over', line, r) === 'win' || statusFor('under', line, r) === 'win';
+    return { ab, name: TEAM_NAME[ab], line, w: r.w, l: r.l, gp, proj, res: r, settled,
+             margin: proj === null ? null : proj - line };
+  });
+  rows.sort((a, b) => {
+    if (barSort === 'name') return a.name.localeCompare(b.name);
+    const x = a[barSort], y = b[barSort];
+    if (x === y || (x == null && y == null)) return a.name.localeCompare(b.name);
+    if (x == null) return 1; if (y == null) return -1;
+    return y - x;                                        // biggest first
+  });
+
+  const pct = n => Math.max(0, Math.min(100, n / GAMES * 100));
+  const settledCount = rows.filter(t => t.settled).length;
+  const shown = hideSettled ? rows.filter(t => !t.settled) : rows;
+  let html = hideSettled
+    ? '<p class="help dim" style="margin:0 0 .75rem;">' + (shown.length
+        ? 'Showing the <b>' + shown.length + '</b> team' + (shown.length === 1 ? '' : 's') + ' still in play · ' + settledCount + ' settled hidden.'
+        : 'Every team’s line is settled — nothing left in play.') + '</p>'
+    : '';
+  html += '<div class="bars' + (focusName ? ' focusing' : '') + '">';
+  shown.forEach(t => {
+    const linePct = pct(t.line);
+    const overHit = statusFor('over', t.line, t.res) === 'win';
+    const underHit = statusFor('under', t.line, t.res) === 'win';
+
+    let under = '', over = '';
+    if (revealed){
+      const mk = side => ctx.entries.filter(e => e.picks[t.ab] === side)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(e => badge(e, side, statusFor(side, t.line, t.res), e.locks.includes(t.ab), ini)).join('');
+      under = mk('under'); over = mk('over');
+    }
+
+    const baseW = pct(Math.min(t.w, t.line));
+    const overW = t.w > t.line ? pct(t.w) - linePct : 0;
+    const status = !t.gp ? 'Season hasn’t started'
+      : overHit ? '<b>Over hit</b> — passed ' + t.line
+      : underHit ? '<b>Under hit</b> — can’t reach ' + t.line
+      : 'On pace for <b>' + t.proj.toFixed(1) + '</b> wins' + (t.gp < 20 ? ' *' : '');
+
+    html += '<div class="bar-card">'
+      + '<div class="bar-top"><div class="bar-name">' + logoImg(t.ab) + '<span>' + esc(t.name) + '</span></div>'
+      + '<div class="bar-rec">' + (t.gp ? t.w + '-' + t.l : '0-0') + '</div></div>'
+      + (revealed ? '<div class="lane" style="grid-template-columns:' + linePct + '% 1fr">'
+          + '<div class="lane-u">' + under + '</div><div class="lane-o">' + over + '</div></div>' : '')
+      + '<div class="track" style="' + (revealed ? '' : 'margin-top:14px') + '">'
+      + '<div class="half" style="left:' + pct(GAMES / 2) + '%"></div>'
+      + '<div class="seg seg-base" style="width:' + baseW + '%"></div>'
+      + (overW ? '<div class="seg seg-over" style="left:' + linePct + '%;width:' + overW + '%"></div>' : '')
+      + '<div class="tick" style="left:' + linePct + '%"></div></div>'
+      + '<div class="bar-foot"><span>Line <b>' + t.line + '</b></span><span>' + status + '</span></div>'
+      + '</div>';
+  });
+  html += '</div>';
+  if (shown.some(t => t.gp && t.gp < 20)) html += '<p class="help dim" style="margin:-.5rem 0 1rem;">* Early in the season — the pace is a small-sample guess.</p>';
+  $('s-teams').innerHTML = html;
+}
+
+/* ============================================================
+   SEASON
+   ============================================================ */
+const seasonCtx = { cup: SEASON.cupWinner, entries: [], teams: [], lines: {}, res: {} };
+
+function picksRevealed(){
+  return !!SEASON.deadline && Date.now() >= Date.parse(SEASON.deadline);
+}
+
+async function loadSeason(){
+  const dot = $('s-dot'), txt = $('s-text'), note = $('s-note');
+  if (SEASON.formUrl){ const f = $('s-form'); f.href = SEASON.formUrl; f.classList.remove('hidden'); }
+
+  if (!SEASON.sheetUrl){
+    dot.className = 'status-dot pre'; txt.textContent = 'Entries open soon';
+    $('s-standings').innerHTML = ''; $('s-bars-wrap').classList.add('hidden');
+    note.innerHTML = '<div class="note">The ' + SEASON.label + ' pool isn&rsquo;t open yet. Once the form is up, this page shows a win bar for every team with its line, and &mdash; after the deadline &mdash; everyone&rsquo;s picks and a live leaderboard. See <b>Rules</b> for how scoring works.</div>';
+    return;
+  }
+
+  const [sheetText, standingsText] = await Promise.all([
+    fetchText(SEASON.sheetUrl, true),
+    fetchText('https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=' + SEASON.espnYear + '&level=3&seasontype=2')   // 2 = regular season; the default is preseason until opening night
+  ]);
+
+  const parsed = parseSheet(sheetText);
+  if (!parsed){
+    dot.className = 'status-dot err'; txt.textContent = 'Couldn’t read the entry sheet';
+    note.innerHTML = '<div class="note bad">Couldn&rsquo;t load the ' + SEASON.label + ' sheet. Check that it&rsquo;s published to the web as CSV and that the question headings look like <code>Team Name - O/U 46.5</code>.</div>';
+    return;
+  }
+  seasonCtx.lines = parsed.lines; seasonCtx.teams = parsed.teams; seasonCtx.entries = parsed.entries;
+
+  seasonCtx.res = {};
+  let standingsOk = false;
+  if (standingsText){
+    try {
+      const walk = n => {
+        (n.children || []).forEach(walk);
+        ((n.standings || {}).entries || []).forEach(en => {
+          const s = {}; (en.stats || []).forEach(x => s[x.name] = x.value);
+          if (s.wins != null && s.losses != null){ seasonCtx.res[en.team.abbreviation] = { w: Math.round(s.wins), l: Math.round(s.losses) }; standingsOk = true; }
+        });
+      };
+      walk(JSON.parse(standingsText));
+    } catch(e){}
+  }
+
+  const gp = Object.values(seasonCtx.res).reduce((s, r) => s + r.w + r.l, 0);
+  const revealed = picksRevealed();
+  dot.className = 'status-dot' + (gp ? '' : ' pre');
+  txt.textContent = !revealed ? 'Entries open · picks hidden until the deadline'
+                  : gp ? 'Season in progress · ' + Math.round(gp / 2) + ' games played'
+                  : 'Picks are in · season hasn’t tipped off';
+  $('s-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+  let msg = '';
+  if (!standingsOk) msg += '<div class="note bad">Couldn&rsquo;t load live team records from ESPN, so wins and pick status are unavailable. Try Refresh.</div>';
+  if (!SEASON.deadline) msg += '<div class="note">No deadline is set, so picks are staying hidden. Set <code>SEASON.deadline</code> in this file to reveal them.</div>';
+  note.innerHTML = msg;
+
+  if (!revealed){
+    const names = parsed.entries.map(e => e.name).sort((a, b) => a.localeCompare(b));
+    $('s-standings').innerHTML = '<div class="card"><div class="card-header">Entries · ' + names.length + ' in</div><div class="card-body">'
+      + (names.length ? '<div class="chips">' + names.map(n => '<span class="chip win">✓ ' + esc(n) + '</span>').join('') + '</div>' : '<span class="dim help">Nobody yet.</span>')
+      + '<p class="help dim" style="margin-top:.75rem;">Everyone&rsquo;s picks appear here after the deadline' + (SEASON.deadline ? ' (' + new Date(SEASON.deadline).toLocaleString([], {weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) + ')' : '') + '.</p></div></div>';
+  } else {
+    renderStandings(seasonCtx, 'Standings · ' + SEASON.label);
+  }
+  $('s-bars-wrap').classList.remove('hidden');
+  renderTeams(seasonCtx, revealed);
+}
+
+/* ============================================================
+   TABS + INIT
+   ============================================================ */
+function showTab(t){
+  ['season', 'rules'].forEach(x => {
+    $('view-' + x).classList.toggle('hidden', x !== t);
+    $('tab-' + x).classList.toggle('active', x === t);
+  });
+  try { history.replaceState(null, '', '#' + t); } catch(e){}
+}
+
+(function init(){
+  const h = (location.hash || '').slice(1);
+  showTab(h === 'rules' ? 'rules' : 'season');
+  $('hide-settled').onchange = e => { hideSettled = e.target.checked; if (seasonCtx.teams.length) renderTeams(seasonCtx, picksRevealed()); };
+  $('bar-sort').onchange = e => { barSort = e.target.value; if (seasonCtx.teams.length) renderTeams(seasonCtx, picksRevealed()); };
+  loadSeason();
+  setInterval(() => { if (SEASON.sheetUrl) loadSeason(); }, REFRESH);
+})();
+</script>
+</body>
+</html>
