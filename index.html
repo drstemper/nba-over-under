@@ -89,6 +89,11 @@
 
   .card { background:var(--surface); border:3px solid var(--ink); box-shadow:5px 5px 0 var(--ink); margin:0 5px 1.75rem 0; }
   .card-header { background:var(--ink); color:var(--accent); font-family:var(--display); font-size:1.4rem; font-weight:500; letter-spacing:.12em; text-transform:uppercase; line-height:1; padding:.5rem 1rem .4rem; }
+  .card-header.collapsible { display:flex; align-items:center; justify-content:space-between; gap:1rem; cursor:pointer; user-select:none; }
+  .card-header.collapsible:hover { color:#fff; }
+  .card-header .sum { margin-left:auto; font-family:var(--heading); font-size:12px; font-weight:600; letter-spacing:0; text-transform:none; color:#fff; }
+  .card-header .caret { display:inline-block; font-size:1.6rem; line-height:.8; transition:transform .15s ease-in-out; }
+  .card-header.collapsed .caret { transform:rotate(-90deg); }
   .card-body { padding:1rem 1.25rem; }
   .scroll { overflow-x:auto; }
 
@@ -171,14 +176,28 @@
   .bar-foot { display:flex; justify-content:space-between; gap:8px; margin-top:10px; font-size:11px; font-weight:500; color:var(--muted); }
   .bar-foot b { color:var(--ink); font-weight:700; }
 
-  .badge { position:relative; display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px; padding:0 5px; border-radius:13px; border:2px solid var(--ink); background:var(--surface); color:var(--ink); font-size:10px; font-weight:700; cursor:default; box-shadow:2px 2px 0 var(--ink); }
-  .badge.win    { background:var(--lime); }
-  .badge.loss   { background:var(--red); }
-  .badge.ahead  { background:var(--soft-win); }
-  .badge.behind { background:var(--soft-loss); }
-  .badge.lg-mini { cursor:inherit; box-shadow:1px 1px 0 var(--ink); }
-  .badge .lk { position:absolute; top:-8px; right:-8px; width:15px; height:15px; border-radius:50%; background:var(--ink); border:2px solid var(--surface); display:flex; align-items:center; justify-content:center; }
+  /* A pick tag is an arrow that points the way the pick goes: Unders point left,
+     Overs point right. The dark outline is the clipped shape itself with the fill
+     layered on top, and the padlock sits in the empty corner at the pointed end. */
+  .badge { --fill:var(--surface); position:relative; display:inline-flex; cursor:default; filter:drop-shadow(2px 2px 0 var(--ink)); }
+  .badge.win    { --fill:var(--lime); }
+  .badge.loss   { --fill:var(--red); }
+  .badge.ahead  { --fill:var(--soft-win); }
+  .badge.behind { --fill:var(--soft-loss); }
+  .badge .shape { position:relative; display:inline-flex; align-items:center; justify-content:center; height:26px; min-width:38px; padding:0 8px; background:var(--ink); font-size:10px; font-weight:700; color:var(--ink); }
+  .badge .shape::before { content:''; position:absolute; inset:2px; background:var(--fill); }
+  .badge .shape i { position:relative; font-style:normal; }
+  .badge.over .shape  { padding:0 15px 0 8px; clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); }
+  .badge.over .shape::before  { clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); }
+  .badge.under .shape { padding:0 8px 0 15px; clip-path:polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%); }
+  .badge.under .shape::before { clip-path:polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); }
+  .badge .lk { position:absolute; top:-8px; width:15px; height:15px; border-radius:50%; background:var(--ink); border:2px solid var(--surface); display:flex; align-items:center; justify-content:center; }
+  .badge.over .lk  { right:-6px; }
+  .badge.under .lk { left:-6px; }
   .badge .lk svg { width:8px; height:8px; fill:var(--accent); }
+  .badge.lg-mini { filter:drop-shadow(1px 1px 0 var(--ink)); }
+  .badge.lg-mini .shape { height:18px; min-width:30px; }
+  .sw { display:inline-block; width:14px; height:14px; border:2px solid var(--ink); background:var(--c); }
   .bars.focusing .badge { opacity:.2; }
   .bars.focusing .badge.focused { opacity:1; }
 
@@ -280,8 +299,8 @@
         <h3>Reading the win bars</h3>
         <ul>
           <li>Each bar fills to the team&rsquo;s current wins, out of 82. The dark tick is the win line; the bar turns green once a team passes it.</li>
-          <li>Badges show who picked what. <b>Left of the tick is Under, right of the tick is Over.</b> A small orange padlock means that pick is a Lock.</li>
-          <li>Badge colour is how the pick is doing: solid green or red once it&rsquo;s settled, light green or red while it&rsquo;s still open and currently on or off pace.</li>
+          <li>Arrow tags show who picked what, and each one points the way the pick goes: <b>left-pointing tags left of the tick are Unders, right-pointing tags right of the tick are Overs.</b> A small padlock on a tag means that pick is a Lock.</li>
+          <li>Tag colour is how the pick is doing: solid green or red once it&rsquo;s settled, light green or red while it&rsquo;s still open and currently on or off pace.</li>
           <li>Tap a name in the key to highlight just that person&rsquo;s picks.</li>
           <li>&ldquo;Hide settled teams&rdquo; removes every team whose line is already decided (it has passed the line, or can no longer reach it), leaving only the teams still in play.</li>
         </ul>
@@ -512,6 +531,8 @@ function rankRows(list, key, order){
    ctx = { teams, lines, res, entries, cup }
    ============================================================ */
 let expanded = null;   // name of the expanded entrant
+let standingsOpen = true;
+try { standingsOpen = localStorage.getItem('nbaou.standingsOpen') !== '0'; } catch(e) {}
 
 function pickCard(r, ctx){
   const res = ctx.res[r.ab], line = ctx.lines[r.ab];
@@ -531,7 +552,11 @@ function renderStandings(ctx, title){
   const list = ctx.entries.map(e => Object.assign({ e }, calcEntry(e, ctx)));
   rankRows(list, 'pace', 'locked');
 
-  let html = '<div class="card"><div class="card-header">' + title + '</div><div class="scroll"><table><thead><tr>'
+  const lead = list.filter(x => x.rank === 1);
+  const summary = 'Leading: ' + lead.map(x => esc(x.e.name)).join(', ') + ' · ' + lead[0].pace + ' on pace';
+  let html = '<div class="card"><div class="card-header collapsible' + (standingsOpen ? '' : ' collapsed') + '" id="st-toggle" role="button" tabindex="0" aria-expanded="' + standingsOpen + '">'
+    + '<span>' + title + '</span>' + (standingsOpen ? '' : '<span class="sum">' + summary + '</span>') + '<span class="caret">▾</span></div>'
+    + '<div class="scroll' + (standingsOpen ? '' : ' hidden') + '"><table><thead><tr>'
     + '<th>#</th><th>Entrant</th><th class="num">On pace</th><th class="num">Locked in</th>'
     + '<th class="num">Correct</th><th>Locks</th><th>Cup pick</th></tr></thead><tbody>';
   list.forEach(x => {
@@ -562,6 +587,14 @@ function renderStandings(ctx, title){
     expanded = expanded === tr.dataset.name ? null : tr.dataset.name;
     renderStandings(ctx, title);
   });
+  const toggle = () => {
+    standingsOpen = !standingsOpen;
+    try { localStorage.setItem('nbaou.standingsOpen', standingsOpen ? '1' : '0'); } catch(e) {}
+    renderStandings(ctx, title);
+  };
+  const th = $('st-toggle');
+  th.onclick = toggle;
+  th.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); toggle(); } };
 }
 
 /* ============================================================
@@ -597,12 +630,12 @@ function makeInitials(names){
 
 const LOCK_SVG = '<span class="lk" title="Lock"><svg viewBox="0 0 24 24"><path d="M17 9V7a5 5 0 0 0-10 0v2H5v13h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7z"/></svg></span>';
 
-function badge(e, pick, st, isLock, ini, extra){
+function badge(e, pick, st, isLock, ini){
   const cls = {win:'win', loss:'loss', ahead:'ahead', behind:'behind'}[st] || '';
   const verdict = {win:'settled — right', loss:'settled — wrong', ahead:'on pace to be right', behind:'off pace'}[st] || '';
   const tip = e.name + ' — ' + cap(pick) + (isLock ? ' (Lock)' : '') + (verdict ? ' · ' + verdict : '');
-  return '<span class="badge ' + cls + (focusName === e.name ? ' focused' : '') + (extra || '') + '" title="' + esc(tip) + '">'
-    + esc(ini[e.name]) + (isLock ? LOCK_SVG : '') + '</span>';
+  return '<span class="badge ' + pick + ' ' + cls + (focusName === e.name ? ' focused' : '') + '" title="' + esc(tip) + '">'
+    + '<span class="shape"><i>' + esc(ini[e.name]) + '</i></span>' + (isLock ? LOCK_SVG : '') + '</span>';
 }
 
 function renderLegend(ctx, ini, revealed){
@@ -612,15 +645,20 @@ function renderLegend(ctx, ini, revealed){
     return;
   }
   const names = ctx.entries.map(e => e.name).sort((a, b) => a.localeCompare(b));
+  const mini = cls => '<span class="badge ' + cls + ' lg-mini"><span class="shape"><i></i></span></span>';
+  const sw = c => '<span class="sw" style="--c:' + c + '"></span>';
   el.innerHTML = names.map(n =>
       '<button class="who' + (focusName === n ? ' on' : '') + '" data-name="' + esc(n) + '">'
-      + '<span class="badge lg-mini">' + esc(ini[n]) + '</span>' + esc(n) + '</button>').join('')
+      + '<span class="badge lg-mini"><span class="shape"><i>' + esc(ini[n]) + '</i></span></span>' + esc(n) + '</button>').join('')
     + '<span class="sep"></span>'
-    + '<span class="key">◀ Under | Over ▶ either side of the tick</span>'
-    + '<span class="key"><span class="badge lg-mini" style="min-width:18px;height:18px;font-size:0;">' + LOCK_SVG + '</span>&nbsp;Lock</span>'
-    + '<span class="key"><span class="badge ahead lg-mini" style="min-width:14px;height:14px;padding:0"></span>on pace'
-    + '&nbsp;<span class="badge behind lg-mini" style="min-width:14px;height:14px;padding:0"></span>off pace</span>'
-    + '<span class="key"><span class="badge win lg-mini" style="min-width:14px;height:14px;padding:0"></span>/<span class="badge loss lg-mini" style="min-width:14px;height:14px;padding:0"></span>settled</span>';
+    + '<span class="key">' + mini('under') + 'picked Under (left of the line)</span>'
+    + '<span class="key">' + mini('over') + 'picked Over (right of the line)</span>'
+    + '<span class="key"><span class="badge over lg-mini"><span class="shape"><i></i></span>' + LOCK_SVG + '</span>a Lock</span>'
+    + '<span class="sep"></span>'
+    + '<span class="key">' + sw('var(--soft-win)') + 'on pace</span>'
+    + '<span class="key">' + sw('var(--soft-loss)') + 'off pace</span>'
+    + '<span class="key">' + sw('var(--lime)') + 'settled right</span>'
+    + '<span class="key">' + sw('var(--red)') + 'settled wrong</span>';
   el.querySelectorAll('.who').forEach(b => b.onclick = () => {
     focusName = focusName === b.dataset.name ? null : b.dataset.name;
     renderTeams(ctx, true);
