@@ -139,20 +139,25 @@
   .sec-head h2 { font-family:var(--display); font-style:italic; font-weight:600; font-size:2.3rem; line-height:1; }
   .sec-head .controls { display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap; }
   .sec-head label { font-size:12px; font-weight:600; color:var(--ink); }
+  .sec-head select:disabled { opacity:.45; cursor:not-allowed; }
   .sec-head label.chk { cursor:pointer; display:inline-flex; align-items:center; gap:7px; }
   .sec-head label.chk input { accent-color:var(--ink); width:16px; height:16px; cursor:pointer; }
-  .sec-head select { font-family:var(--heading); font-size:13px; font-weight:600; padding:5px 8px; margin-left:6px; border:2px solid var(--ink); background:var(--surface); color:var(--ink); border-radius:0; }
+  .sec-head select, .sec-head select:disabled { font-family:var(--heading); font-size:13px; font-weight:600; padding:5px 8px; margin-left:6px; border:2px solid var(--ink); background:var(--surface); color:var(--ink); border-radius:0; }
 
   .legend { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; font-size:12px; font-weight:500; color:var(--muted); background:var(--surface); border:2px solid var(--ink); padding:8px 12px; margin-bottom:1.1rem; }
-  .legend .who { display:inline-flex; align-items:center; gap:6px; cursor:pointer; background:none; border:2px solid transparent; padding:2px 8px 2px 3px; font:inherit; font-weight:600; color:var(--ink); }
+  .legend .who { cursor:pointer; background:none; border:2px solid transparent; padding:2px 9px; font:inherit; font-weight:600; color:var(--ink); }
   .legend .who:hover { border-color:var(--ink); }
   .legend .who.on { border-color:var(--ink); background:var(--soft-mid); }
   .legend .sep { flex-basis:100%; height:0; }
   .legend .key { display:inline-flex; align-items:center; gap:5px; }
 
-  .bars { display:grid; grid-template-columns:repeat(auto-fill, minmax(440px, 1fr)); gap:16px 18px; margin-bottom:1.75rem; padding-right:5px; }
+  .bars { display:grid; grid-template-columns:repeat(auto-fill, minmax(440px, 1fr)); gap:28px 18px; margin-bottom:1.75rem; padding-right:5px; padding-top:10px; }
   @media (max-width:520px){ .bars { grid-template-columns:1fr; } }
   .bar-card { background:var(--surface); border:3px solid var(--ink); box-shadow:5px 5px 0 var(--ink); padding:10px 14px 10px; }
+  .bar-card { position:relative; }
+  .stamp { position:absolute; top:-19px; right:16px; transform:rotate(-2deg); z-index:2; font-family:var(--display); font-size:1.05rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; line-height:1.15; padding:1px 9px 0; border:2px solid var(--ink); box-shadow:2px 2px 0 var(--ink); white-space:nowrap; }
+  .stamp.unan { background:var(--accent); }
+  .stamp.wolf { background:#a3d7ff; }
   .bar-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .bar-name { display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; min-width:0; }
   .bar-name img { width:26px; height:26px; object-fit:contain; flex:0 0 auto; }
@@ -184,9 +189,9 @@
   .badge.loss   { --fill:var(--red); }
   .badge.ahead  { --fill:var(--soft-win); }
   .badge.behind { --fill:var(--soft-loss); }
-  .badge .shape { position:relative; display:inline-flex; align-items:center; justify-content:center; height:26px; min-width:38px; padding:0 8px; background:var(--ink); font-size:10px; font-weight:700; color:var(--ink); }
+  .badge .shape { position:relative; display:inline-flex; align-items:center; justify-content:center; height:26px; min-width:38px; padding:0 8px; background:var(--ink); font-size:11px; font-weight:700; color:var(--ink); }
   .badge .shape::before { content:''; position:absolute; inset:2px; background:var(--fill); }
-  .badge .shape i { position:relative; font-style:normal; }
+  .badge .shape i { position:relative; font-style:normal; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .badge.over .shape  { padding:0 15px 0 8px; clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); }
   .badge.over .shape::before  { clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); }
   .badge.under .shape { padding:0 8px 0 15px; clip-path:polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%); }
@@ -195,8 +200,6 @@
   .badge.over .lk  { right:-6px; }
   .badge.under .lk { left:-6px; }
   .badge .lk svg { width:8px; height:8px; fill:var(--accent); }
-  .badge.lg-mini { filter:drop-shadow(1px 1px 0 var(--ink)); }
-  .badge.lg-mini .shape { height:18px; min-width:30px; }
   .sw { display:inline-block; width:14px; height:14px; border:2px solid var(--ink); background:var(--c); }
   .bars.focusing .badge { opacity:.2; }
   .bars.focusing .badge.focused { opacity:1; }
@@ -262,6 +265,13 @@
         <h2>Team by team</h2>
         <div class="controls">
           <label class="chk"><input type="checkbox" id="hide-settled"> Hide settled teams</label>
+          <label>Show
+            <select id="consensus-filter">
+              <option value="all">All teams</option>
+              <option value="unanimous">Unanimous picks</option>
+              <option value="wolf">Lone wolf picks</option>
+            </select>
+          </label>
           <label>Sort by
             <select id="bar-sort">
               <option value="name">Team name</option>
@@ -302,6 +312,7 @@
           <li>Arrow tags show who picked what, and each one points the way the pick goes: <b>left-pointing tags left of the tick are Unders, right-pointing tags right of the tick are Overs.</b> A small padlock on a tag means that pick is a Lock.</li>
           <li>Tag colour is how the pick is doing: solid green or red once it&rsquo;s settled, light green or red while it&rsquo;s still open and currently on or off pace.</li>
           <li>Tap a name in the key to highlight just that person&rsquo;s picks.</li>
+          <li>A gold <b>Unanimous</b> stamp on a team means everyone picked the same side. A blue <b>Lone wolf</b> stamp means exactly one person is going against everyone else, and names who. Both need at least three entrants. The &ldquo;Show&rdquo; menu narrows the bars to just those teams.</li>
           <li>&ldquo;Hide settled teams&rdquo; removes every team whose line is already decided (it has passed the line, or can no longer reach it), leaving only the teams still in play.</li>
         </ul>
       </div>
@@ -605,55 +616,30 @@ function renderStandings(ctx, title){
    ============================================================ */
 let barSort = 'name';
 let hideSettled = false;   // "Hide settled teams" checkbox
+let consFilter = 'all';    // 'all' | 'unanimous' | 'wolf'
 let focusName = null;      // legend click highlights one entrant's picks
-
-// Short, unique badge text per entrant: "Ben P" → BP, "Dave" → D, and if two
-// names would collide they grow ("Dan" / "Dave" → DA / DA → DAN / DAV).
-function makeInitials(names){
-  const cands = n => {
-    const w = n.trim().split(/\s+/), letters = n.replace(/[^A-Za-z0-9]/g, '');
-    return [w.length > 1 ? w[0][0] + w[1][0] : w[0][0], letters.slice(0, 2), letters.slice(0, 3), letters]
-      .map(s => s.toUpperCase());
-  };
-  const out = {}, used = new Set();
-  for (let tier = 0; tier < 4; tier++){
-    const pending = names.filter(n => !(n in out));
-    pending.forEach(n => {
-      const c = cands(n)[tier];
-      const clash = names.some(o => o !== n && (o in out ? out[o] === c : cands(o)[tier] === c));
-      if (!clash && !used.has(c)){ out[n] = c; used.add(c); }
-    });
-  }
-  names.forEach(n => { if (!(n in out)){ let c = cands(n)[3] || '?', k = 2; while (used.has(c)) c = cands(n)[3] + k++; out[n] = c; used.add(c); } });
-  return out;
-}
 
 const LOCK_SVG = '<span class="lk" title="Lock"><svg viewBox="0 0 24 24"><path d="M17 9V7a5 5 0 0 0-10 0v2H5v13h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7z"/></svg></span>';
 
-function badge(e, pick, st, isLock, ini){
+function badge(e, pick, st, isLock){
   const cls = {win:'win', loss:'loss', ahead:'ahead', behind:'behind'}[st] || '';
   const verdict = {win:'settled — right', loss:'settled — wrong', ahead:'on pace to be right', behind:'off pace'}[st] || '';
   const tip = e.name + ' — ' + cap(pick) + (isLock ? ' (Lock)' : '') + (verdict ? ' · ' + verdict : '');
   return '<span class="badge ' + pick + ' ' + cls + (focusName === e.name ? ' focused' : '') + '" title="' + esc(tip) + '">'
-    + '<span class="shape"><i>' + esc(ini[e.name]) + '</i></span>' + (isLock ? LOCK_SVG : '') + '</span>';
+    + '<span class="shape"><i>' + esc(e.name) + '</i></span>' + (isLock ? LOCK_SVG : '') + '</span>';
 }
 
-function renderLegend(ctx, ini, revealed){
+function renderLegend(ctx, revealed){
   const el = $('bar-legend');
   if (!revealed){
-    el.innerHTML = '<span class="key"><b>' + ctx.entries.length + '</b>&nbsp;entered — pick badges appear here after the deadline.</span>';
+    el.innerHTML = '<span class="key"><b>' + ctx.entries.length + '</b>&nbsp;entered — everyone\'s picks appear here after the deadline.</span>';
     return;
   }
+  // Names exactly as people submitted them; clicking one highlights that person's picks.
   const names = ctx.entries.map(e => e.name).sort((a, b) => a.localeCompare(b));
-  const mini = cls => '<span class="badge ' + cls + ' lg-mini"><span class="shape"><i></i></span></span>';
   const sw = c => '<span class="sw" style="--c:' + c + '"></span>';
-  el.innerHTML = names.map(n =>
-      '<button class="who' + (focusName === n ? ' on' : '') + '" data-name="' + esc(n) + '">'
-      + '<span class="badge lg-mini"><span class="shape"><i>' + esc(ini[n]) + '</i></span></span>' + esc(n) + '</button>').join('')
-    + '<span class="sep"></span>'
-    + '<span class="key">' + mini('under') + 'picked Under (left of the line)</span>'
-    + '<span class="key">' + mini('over') + 'picked Over (right of the line)</span>'
-    + '<span class="key"><span class="badge over lg-mini"><span class="shape"><i></i></span>' + LOCK_SVG + '</span>a Lock</span>'
+  el.innerHTML = '<span class="key">Highlight:</span>'
+    + names.map(n => '<button class="who' + (focusName === n ? ' on' : '') + '" data-name="' + esc(n) + '">' + esc(n) + '</button>').join('')
     + '<span class="sep"></span>'
     + '<span class="key">' + sw('var(--soft-win)') + 'on pace</span>'
     + '<span class="key">' + sw('var(--soft-loss)') + 'off pace</span>'
@@ -665,9 +651,22 @@ function renderLegend(ctx, ini, revealed){
   });
 }
 
+// Unanimous: everyone who picked the team is on the same side. Lone wolf: exactly one
+// person is on one side and everyone else on the other. Both need at least 3 entrants --
+// with two, a 1-1 split is just a split.
+function consensusOf(ab, entries){
+  const over = [], under = [];
+  entries.forEach(e => { const p = e.picks[ab]; if (p === 'over') over.push(e); else if (p === 'under') under.push(e); });
+  if (over.length + under.length < 3) return null;
+  if (!over.length || !under.length) return { kind: 'unanimous', side: over.length ? 'over' : 'under' };
+  if (over.length === 1) return { kind: 'wolf', side: 'over', who: over[0] };
+  if (under.length === 1) return { kind: 'wolf', side: 'under', who: under[0] };
+  return null;
+}
+
 function renderTeams(ctx, revealed){
-  const ini = makeInitials(ctx.entries.map(e => e.name));
-  renderLegend(ctx, ini, revealed);
+  renderLegend(ctx, revealed);
+  $('consensus-filter').disabled = !revealed;     // nothing to filter on until picks are visible
 
   const rows = ctx.teams.map(ab => {
     const r = ctx.res[ab] || { w: 0, l: 0 }, line = ctx.lines[ab];
@@ -675,6 +674,7 @@ function renderTeams(ctx, revealed){
     // Settled = the line is decided whichever way anyone picked.
     const settled = statusFor('over', line, r) === 'win' || statusFor('under', line, r) === 'win';
     return { ab, name: TEAM_NAME[ab], line, w: r.w, l: r.l, gp, proj, res: r, settled,
+             cons: revealed ? consensusOf(ab, ctx.entries) : null,
              margin: proj === null ? null : proj - line };
   });
   rows.sort((a, b) => {
@@ -686,12 +686,16 @@ function renderTeams(ctx, revealed){
   });
 
   const pct = n => Math.max(0, Math.min(100, n / GAMES * 100));
-  const settledCount = rows.filter(t => t.settled).length;
-  const shown = hideSettled ? rows.filter(t => !t.settled) : rows;
-  let html = hideSettled
+  const consOk = t => !revealed || consFilter === 'all'
+    || (consFilter === 'unanimous' ? !!t.cons && t.cons.kind === 'unanimous' : !!t.cons && t.cons.kind === 'wolf');
+  const shown = rows.filter(t => (!hideSettled || !t.settled) && consOk(t));
+  const active = [];
+  if (hideSettled) active.push('still in play');
+  if (revealed && consFilter !== 'all') active.push(consFilter === 'wolf' ? 'lone wolf picks' : 'unanimous picks');
+  let html = active.length
     ? '<p class="help dim" style="margin:0 0 .75rem;">' + (shown.length
-        ? 'Showing the <b>' + shown.length + '</b> team' + (shown.length === 1 ? '' : 's') + ' still in play · ' + settledCount + ' settled hidden.'
-        : 'Every team’s line is settled — nothing left in play.') + '</p>'
+        ? 'Showing <b>' + shown.length + '</b> of ' + rows.length + ' teams · ' + active.join(' + ') + '.'
+        : 'No teams match — ' + active.join(' + ') + '.') + '</p>'
     : '';
   html += '<div class="bars' + (focusName ? ' focusing' : '') + '">';
   shown.forEach(t => {
@@ -703,7 +707,7 @@ function renderTeams(ctx, revealed){
     if (revealed){
       const mk = side => ctx.entries.filter(e => e.picks[t.ab] === side)
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map(e => badge(e, side, statusFor(side, t.line, t.res), e.locks.includes(t.ab), ini)).join('');
+        .map(e => badge(e, side, statusFor(side, t.line, t.res), e.locks.includes(t.ab))).join('');
       under = mk('under'); over = mk('over');
     }
 
@@ -714,7 +718,11 @@ function renderTeams(ctx, revealed){
       : underHit ? '<b>Under hit</b> — can’t reach ' + t.line
       : 'On pace for <b>' + t.proj.toFixed(1) + '</b> wins' + (t.gp < 20 ? ' *' : '');
 
-    html += '<div class="bar-card">'
+    const stamp = !t.cons ? ''
+      : t.cons.kind === 'wolf' ? '<span class="stamp wolf" title="' + esc(t.cons.who.name) + ' is the only one on the ' + cap(t.cons.side) + '">Lone wolf · ' + esc(t.cons.who.name) + '</span>'
+      : '<span class="stamp unan" title="Everyone picked the ' + cap(t.cons.side) + '">Unanimous · ' + cap(t.cons.side) + '</span>';
+
+    html += '<div class="bar-card">' + stamp
       + '<div class="bar-top"><div class="bar-name">' + logoImg(t.ab) + '<span>' + esc(t.name) + '</span></div>'
       + '<div class="bar-rec">' + (t.gp ? t.w + '-' + t.l : '0-0') + '</div></div>'
       + (revealed ? '<div class="lane" style="grid-template-columns:' + linePct + '% 1fr">'
@@ -820,6 +828,7 @@ function showTab(t){
   const h = (location.hash || '').slice(1);
   showTab(h === 'rules' ? 'rules' : 'season');
   $('hide-settled').onchange = e => { hideSettled = e.target.checked; if (seasonCtx.teams.length) renderTeams(seasonCtx, picksRevealed()); };
+  $('consensus-filter').onchange = e => { consFilter = e.target.value; if (seasonCtx.teams.length) renderTeams(seasonCtx, picksRevealed()); };
   $('bar-sort').onchange = e => { barSort = e.target.value; if (seasonCtx.teams.length) renderTeams(seasonCtx, picksRevealed()); };
   loadSeason();
   setInterval(() => { if (SEASON.sheetUrl) loadSeason(); }, REFRESH);
