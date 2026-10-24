@@ -320,12 +320,12 @@
           <li>Most points wins; the maximum is 36. Lines end in .5, so there are no pushes. Ties share a rank.</li>
         </ul>
         <h3>During the season</h3>
-        <p>The standings show two numbers. <b>Locked in</b> counts picks that can no longer change &mdash; an Over is locked in once the team passes the line, an Under once the team can&rsquo;t reach it. <b>On pace</b> adds the open picks that are currently tracking to win &mdash; that is, where the team&rsquo;s projected win total (ESPN&rsquo;s BPI projection, which weighs the record so far, team strength and the remaining schedule) is on the picked side of the line. Projections move with injuries and results, so on-pace picks can flip; only <b>Locked in</b> is final.</p>
+        <p>The standings show two numbers. <b>Locked in</b> counts picks that can no longer change &mdash; an Over is locked in once the team passes the line, an Under once the team can&rsquo;t reach it. <b>On pace</b> adds the open picks that are currently tracking to win &mdash; that is, where the team&rsquo;s projected win total (ESPN&rsquo;s BPI projection, which weighs the record so far, team strength and the remaining schedule) is on the picked side of the line. When the projection is too close to the line to call, the pick is a <b>toss-up</b> and counts half a point; how close is &ldquo;too close&rdquo; shrinks as the season goes on (about two wins in week one, under one win in the last ten games). Projections move with injuries and results, so on-pace picks can flip; only <b>Locked in</b> is final.</p>
         <h3>Reading the win bars</h3>
         <ul>
           <li>Each bar fills to the team&rsquo;s current wins, out of 82. The dark tick is the win line, and the numbers underneath count wins in tens. The faint striped stretch ahead of the solid fill is where ESPN projects the team to finish; once a team&rsquo;s line is settled, the stripes go away.</li>
           <li>Arrow tags show who picked what, and each one points the way the pick goes: <b>left-pointing tags left of the tick are Unders, right-pointing tags right of the tick are Overs.</b> A small padlock on a tag means that pick is a Lock.</li>
-          <li>Tag colour is how the pick is doing: solid green or red once it&rsquo;s settled, light green or red while it&rsquo;s still open and currently on or off pace.</li>
+          <li>Tag colour is how the pick is doing: solid green or red once it&rsquo;s settled, light green or red while it&rsquo;s still open and currently on or off pace, and plain white for a toss-up.</li>
           <li>Tap a name in the key to highlight just that person&rsquo;s picks.</li>
           <li>A gold <b>Unanimous</b> stamp on a team means everyone picked the same side. A blue <b>Lone wolf</b> stamp means exactly one person is going against everyone else, and names who. Both need at least three entrants. The &ldquo;Show&rdquo; menu narrows the bars to just those teams.</li>
           <li>&ldquo;Hide settled teams&rdquo; removes every team whose line is already decided (it has passed the line, or can no longer reach it), leaving only the teams still in play.</li>
@@ -538,6 +538,11 @@ function parseBPI(text){
   } catch(e){}
   return out;
 }
+// A projection this close to the line is a coin flip. Each remaining game is roughly 50/50,
+// so a team's final win total swings by about half the square root of the games left;
+// "close" means within half of that (about 2 wins in week one, under 1 win in the last ten games).
+function tossBand(gp){ return 0.25 * Math.sqrt(Math.max(0, GAMES - gp)); }
+function fmtPts(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
 function projFor(ab, ctx){
   const res = ctx.res[ab];
   if (!res || res.w + res.l === 0) return null;
@@ -559,11 +564,12 @@ function statusFor(pick, line, res, proj){
   if (settled) return settled === pick ? 'win' : 'loss';
   if (!gp) return 'none';
   if (proj == null) proj = blendWins(res, line);
+  if (Math.abs(proj - line) <= tossBand(gp)) return 'tossup';
   return (proj > line) === (pick === 'over') ? 'ahead' : 'behind';
 }
 
 function calcEntry(e, ctx){
-  let locked = 0, pace = 0, correct = 0, lockHits = 0, wrong = 0, ahead = 0, behind = 0, idle = 0, upside = 0;
+  let locked = 0, pace = 0, correct = 0, lockHits = 0, wrong = 0, ahead = 0, behind = 0, toss = 0, idle = 0, upside = 0;
   const rows = ctx.teams.map(ab => {
     const pick = e.picks[ab], isLock = e.locks.includes(ab) && !!pick;
     const st = statusFor(pick, ctx.lines[ab], ctx.res[ab], projFor(ab, ctx));
@@ -572,14 +578,16 @@ function calcEntry(e, ctx){
     else if (st === 'loss') wrong++;
     else if (pick && st !== 'push'){                     // still undecided
       upside += v;
-      if (st === 'ahead'){ pace += v; ahead++; } else if (st === 'behind') behind++; else idle++;
+      if (st === 'ahead'){ pace += v; ahead++; } else if (st === 'behind') behind++;
+      else if (st === 'tossup'){ pace += v / 2; toss++; }   // coin flip: half credit
+      else idle++;
     }
     return { ab, pick, isLock, st };
   });
   const cup = ctx.cup && e.cup === ctx.cup ? 3 : 0;
   const cupOpen = !ctx.cup && e.cup ? 3 : 0;            // Cup not decided yet: still up for grabs
   return { locked: locked + cup, pace: pace + cup, ceiling: locked + cup + upside + cupOpen,
-           correct, lockHits, wrong, ahead, behind, idle, cup, rows };
+           correct, lockHits, wrong, ahead, behind, toss, idle, cup, rows };
 }
 
 function rankRows(list, key, order){
@@ -601,7 +609,7 @@ let expanded = null;   // name of the expanded entrant
 let standingsOpen = true;
 try { standingsOpen = localStorage.getItem('nbaou.standingsOpen') !== '0'; } catch(e) {}
 
-const ST_WORD = { win:'settled right', loss:'settled wrong', ahead:'on pace', behind:'off pace', push:'push', none:'not started' };
+const ST_WORD = { win:'settled right', loss:'settled wrong', ahead:'on pace', behind:'off pace', tossup:'toss-up', push:'push', none:'not started' };
 
 // Every pick for one person, riskiest first: open picks by how little cushion they have
 // (projected wins vs. the line, in the direction they picked), then settled ones.
@@ -611,7 +619,7 @@ function detailPanel(x, ctx){
     const res = ctx.res[r.ab], line = ctx.lines[r.ab], gp = res ? res.w + res.l : 0;
     const proj = projFor(r.ab, ctx);
     const cushion = proj === null ? null : (r.pick === 'over' ? proj - line : line - proj);
-    const group = r.st === 'ahead' || r.st === 'behind' ? 0 : r.st === 'none' || r.st === 'push' ? 1 : r.st === 'win' ? 2 : 3;
+    const group = r.st === 'ahead' || r.st === 'behind' || r.st === 'tossup' ? 0 : r.st === 'none' || r.st === 'push' ? 1 : r.st === 'win' ? 2 : 3;
     return { r, res, line, proj, cushion, group };
   }).sort((a, b) => a.group - b.group
     || (a.cushion === null) - (b.cushion === null) || (a.cushion || 0) - (b.cushion || 0)
@@ -624,12 +632,14 @@ function detailPanel(x, ctx){
     + '<span class="chip wrong">' + x.wrong + ' settled wrong</span>'
     + '<span class="chip ahead">' + x.ahead + ' on pace</span>'
     + '<span class="chip behind">' + x.behind + ' off pace</span>'
+    + (x.toss ? '<span class="chip">' + x.toss + ' toss-up</span>' : '')
     + (x.idle ? '<span class="chip">' + x.idle + ' not started</span>' : '')
     + (x.out ? '<span class="warn">Can no longer finish 1st</span>' : '') + '</div>';
 
   const body = items.map(({ r, res, line, proj, cushion }) => {
     const chipCls = { win:'right', loss:'wrong', ahead:'ahead', behind:'behind' }[r.st] || '';
     const cz = cushion === null ? '<span class="dim">—</span>'
+      : Math.abs(cushion) < 0.05 ? '0.0'
       : '<span class="' + (cushion >= 0 ? 'pos' : 'neg') + '">' + (cushion >= 0 ? '+' : '−') + Math.abs(cushion).toFixed(1) + '</span>';
     return '<tr><td><div class="tm">' + logoImg(r.ab) + esc(TEAM_NAME[r.ab] || r.ab) + '</div></td>'
       + '<td class="sub">' + (r.isLock ? '★ ' : '') + cap(r.pick) + ' ' + line + '</td>'
@@ -654,7 +664,7 @@ function renderStandings(ctx, title){
   list.forEach(x => x.out = x.ceiling < bestFloor);      // can't even tie the best banked total
 
   const lead = list.filter(x => x.rank === 1);
-  const summary = 'Leading: ' + lead.map(x => esc(x.e.name)).join(', ') + ' · ' + lead[0].pace + ' on pace';
+  const summary = 'Leading: ' + lead.map(x => esc(x.e.name)).join(', ') + ' · ' + fmtPts(lead[0].pace) + ' on pace';
   let html = '<div class="card"><div class="card-header collapsible' + (standingsOpen ? '' : ' collapsed') + '" id="st-toggle" role="button" tabindex="0" aria-expanded="' + standingsOpen + '">'
     + '<span>' + title + '</span>' + (standingsOpen ? '' : '<span class="sum">' + summary + '</span>') + '<span class="caret">▾</span></div>'
     + '<div class="scroll' + (standingsOpen ? '' : ' hidden') + '"><table><thead><tr>'
@@ -673,7 +683,7 @@ function renderStandings(ctx, title){
     html += '<tr class="entry-row" data-name="' + esc(x.e.name) + '">'
       + '<td class="rank rank-' + x.rank + '">' + (x.tied ? 'T' : '') + x.rank + '</td>'
       + '<td><div class="entry-name">' + esc(x.e.name) + '<span class="chevron">' + (open ? '▲' : '▼') + '</span></div></td>'
-      + '<td class="num">' + x.pace + '</td><td class="num">' + x.locked + '</td>'
+      + '<td class="num">' + fmtPts(x.pace) + '</td><td class="num">' + x.locked + '</td>'
       + (anySettled ? '<td class="num">' + x.correct + '/' + (x.correct + x.wrong) + '</td>' : '')
       + '<td><div class="chips">' + lockChips + '</div></td>'
       + '<td>' + cupChip + '</td></tr>';
@@ -714,7 +724,7 @@ const LOCK_SVG = '<span class="lk" title="Lock"><svg viewBox="0 0 24 24"><path d
 
 function badge(e, pick, st, isLock){
   const cls = {win:'win', loss:'loss', ahead:'ahead', behind:'behind'}[st] || '';
-  const verdict = {win:'settled — right', loss:'settled — wrong', ahead:'on pace to be right', behind:'off pace'}[st] || '';
+  const verdict = {win:'settled — right', loss:'settled — wrong', ahead:'on pace to be right', behind:'off pace', tossup:'too close to call'}[st] || '';
   const tip = e.name + ' — ' + cap(pick) + (isLock ? ' (Lock)' : '') + (verdict ? ' · ' + verdict : '');
   return '<span class="badge ' + pick + ' ' + cls + (focusName === e.name ? ' focused' : '') + '" title="' + esc(tip) + '">'
     + '<span class="shape"><i>' + esc(e.name) + '</i></span>' + (isLock ? LOCK_SVG : '') + '</span>';
@@ -734,6 +744,7 @@ function renderLegend(ctx, revealed){
     + '<span class="sep"></span>'
     + '<span class="key">' + sw('var(--soft-win)') + 'on pace</span>'
     + '<span class="key">' + sw('var(--soft-loss)') + 'off pace</span>'
+    + '<span class="key">' + sw('var(--surface)') + 'toss-up</span>'
     + '<span class="key">' + sw('var(--lime)') + 'settled right</span>'
     + '<span class="key">' + sw('var(--red)') + 'settled wrong</span>';
   el.querySelectorAll('.who').forEach(b => b.onclick = () => {
