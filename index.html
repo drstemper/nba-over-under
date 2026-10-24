@@ -104,7 +104,7 @@
   tbody tr:hover { background:var(--bg); }
   tbody td { padding:10px 12px; vertical-align:middle; }
   .num { font-family:var(--display); font-size:1.5rem; font-weight:500; line-height:1; text-align:right; }
-  th.num { text-align:right; font-family:var(--heading); font-size:11px; }
+  th.num { text-align:right; font-family:var(--heading); font-size:11px; font-weight:700; line-height:normal; }
   .rank { font-family:var(--display); font-size:1.5rem; font-weight:600; color:var(--muted); width:46px; }
   .rank-1 { color:#a87a12; }
   .entry-name { font-weight:700; font-size:15px; }
@@ -126,21 +126,46 @@
   .expand-inner { padding:14px 16px; background:var(--bg); position:sticky; left:0; box-sizing:border-box; }   /* width is set in JS so the panel stays in view when the table scrolls sideways */
   .lock { color:var(--ink); }
 
+  /* Standings on a phone: each person becomes two lines -- rank, name and the numbers on top,
+     Locks and the Cup pick underneath -- so nothing sits off-screen behind a sideways scroll. */
+  @media (max-width:600px){
+    .st, .st > thead, .st > tbody { display:block; }
+    .st > thead > tr { display:flex; align-items:stretch; }
+    .st > tbody > tr.entry-row { display:flex; align-items:center; flex-wrap:wrap; }
+    .st > thead > tr > th, .st > tbody > tr.entry-row > td { padding:8px 6px; }
+    .st > thead > tr > th:nth-last-child(-n+2) { display:none; }          /* Locks and Cup headers: those sit on line two */
+    .st > thead > tr > th:first-child, .st .rank { width:34px; flex:0 0 34px; padding-left:10px; }
+    .st > thead > tr > th:nth-child(2), .st > tbody > tr.entry-row > td:nth-child(2) { flex:1 1 0; min-width:0; }
+    .st > thead > tr > th.num, .st > tbody > tr.entry-row > td.num { flex:0 0 66px; }
+    .st > tbody > tr.entry-row::after { content:''; flex-basis:100%; order:1; height:0; }
+    .st > tbody > tr.entry-row > td:nth-last-child(2) { order:2; flex:1 1 0; min-width:0; padding:0 4px 10px 34px; }
+    .st > tbody > tr.entry-row > td:last-child { order:2; flex:0 0 auto; padding:0 8px 10px 0; align-self:flex-start; }
+    .entry-row .chips { min-width:0; max-width:none; }
+    .st > tbody > tr.expand-row { display:block; }
+  }
+
   /* per-person detail (expanded row) */
   .detail-sum { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; margin-bottom:12px; font-size:13px; font-weight:600; }
   .detail-sum b { font-family:var(--display); font-size:1.4rem; font-weight:600; line-height:1; margin-right:3px; }
   .detail-sum .warn { color:var(--loss-ink); font-weight:700; }
-  .dt-wrap { border:2px solid var(--ink); background:var(--surface); overflow-x:auto; }
-  .dt { font-size:13px; }
+  .dt-wrap { display:inline-block; max-width:100%; border:2px solid var(--ink); background:var(--surface); overflow-x:auto; vertical-align:top; }
+  .dt { font-size:13px; width:auto; }
   .dt thead th { padding:7px 10px; border-bottom:2px solid var(--ink); }
-  .dt tbody td { padding:7px 10px; }
-  .dt .tm { display:flex; align-items:center; gap:7px; font-weight:700; white-space:nowrap; }
-  .dt .tm img { width:20px; height:20px; object-fit:contain; }
+  .dt tbody td { padding:7px 18px 7px 10px; }
+  .dt td.tcell { width:1%; font-weight:700; text-align:center; white-space:nowrap; }
+  .dt .logo-only { display:block; width:26px; height:26px; object-fit:contain; margin:0 auto; }
+  .dt th:first-child { text-align:center; }
+  .lki { display:inline-block; width:11px; height:11px; margin-right:4px; vertical-align:-1px; fill:currentColor; }
   .dt td.r, .dt th.r { text-align:right; }
   .dt td.sub { font-weight:700; white-space:nowrap; }
   .dt .pos { color:var(--win-ink); } .dt .neg { color:var(--loss-ink); }
   .chip.ahead  { background:var(--soft-win); }
   .chip.behind { background:var(--soft-loss); }
+  @media (max-width:600px){
+    .dt-wrap { display:block; }
+    .dt thead th, .dt tbody td { padding:7px 6px; }
+    .dt tr > :nth-child(3), .dt tr > :nth-child(4) { display:none; }   /* Record and Proj. wins: Cushion says it, and Status needs the room */
+  }
   .chip.right { background:var(--lime); }
   .chip.wrong { background:var(--red); }
 
@@ -424,6 +449,9 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const logo = ab => 'https://a.espncdn.com/i/teamlogos/nba/500/' + ab.toLowerCase() + '.png';
 const logoImg = ab => '<img src="' + logo(ab) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">';
+const LOCK_ICON = '<svg class="lki" viewBox="0 0 24 24" role="img" aria-label="Lock"><title>Lock</title><path d="M17 9V7a5 5 0 0 0-10 0v2H5v13h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7z"/></svg>';
+// Logo on its own (team name in the tooltip); falls back to the abbreviation if the image can't load.
+const logoOnly = ab => '<img class="logo-only" src="' + logo(ab) + '" alt="' + esc(TEAM_NAME[ab] || ab) + '" title="' + esc(TEAM_NAME[ab] || ab) + '" loading="lazy" onerror="this.replaceWith(document.createTextNode(\'' + esc(ab) + '\'))">';
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
 
 function fetchWithTimeout(url, opts, ms){
@@ -641,8 +669,8 @@ function detailPanel(x, ctx){
     const cz = cushion === null ? '<span class="dim">—</span>'
       : Math.abs(cushion) < 0.05 ? '0.0'
       : '<span class="' + (cushion >= 0 ? 'pos' : 'neg') + '">' + (cushion >= 0 ? '+' : '−') + Math.abs(cushion).toFixed(1) + '</span>';
-    return '<tr><td><div class="tm">' + logoImg(r.ab) + esc(TEAM_NAME[r.ab] || r.ab) + '</div></td>'
-      + '<td class="sub">' + (r.isLock ? '★ ' : '') + cap(r.pick) + ' ' + line + '</td>'
+    return '<tr><td class="tcell">' + logoOnly(r.ab) + '</td>'
+      + '<td class="sub">' + (r.isLock ? LOCK_ICON : '') + cap(r.pick) + ' ' + line + '</td>'
       + '<td class="r">' + (res ? res.w + '-' + res.l : '—') + '</td>'
       + '<td class="r">' + (proj === null ? '—' : proj.toFixed(1)) + '</td>'
       + '<td class="r">' + cz + '</td>'
@@ -667,14 +695,14 @@ function renderStandings(ctx, title){
   const summary = 'Leading: ' + lead.map(x => esc(x.e.name)).join(', ') + ' · ' + fmtPts(lead[0].pace) + ' on pace';
   let html = '<div class="card"><div class="card-header collapsible' + (standingsOpen ? '' : ' collapsed') + '" id="st-toggle" role="button" tabindex="0" aria-expanded="' + standingsOpen + '">'
     + '<span>' + title + '</span>' + (standingsOpen ? '' : '<span class="sum">' + summary + '</span>') + '<span class="caret">▾</span></div>'
-    + '<div class="scroll' + (standingsOpen ? '' : ' hidden') + '"><table><thead><tr>'
+    + '<div class="scroll' + (standingsOpen ? '' : ' hidden') + '"><table class="st"><thead><tr>'
     + '<th>#</th><th>Entrant</th><th class="num">On pace</th><th class="num">Locked in</th>'
     + (anySettled ? '<th class="num" title="Settled picks that came out right, out of picks settled so far">Correct</th>' : '') + '<th>Locks</th><th>Cup pick</th></tr></thead><tbody>';
   list.forEach(x => {
     const lockChips = x.e.locks.map(ab => {
       const r = x.rows.find(q => q.ab === ab);
       const cls = !r ? '' : {win:'win', loss:'loss', ahead:'live', behind:'live'}[r.st] || '';
-      return '<span class="chip ' + cls + '">★ ' + esc(ab) + ' ' + (r && r.pick ? cap(r.pick) : '') + '</span>';
+      return '<span class="chip ' + cls + '">' + LOCK_ICON + esc(ab) + ' ' + (r && r.pick ? cap(r.pick) : '') + '</span>';
     }).join('');
     const cupChip = x.e.cup
       ? '<span class="chip cup ' + (ctx.cup ? (x.e.cup === ctx.cup ? 'win' : 'loss') : '') + '" title="' + esc(TEAM_NAME[x.e.cup] || x.e.cup) + '">' + logoImg(x.e.cup) + esc(x.e.cup) + '</span>'
