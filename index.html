@@ -72,7 +72,7 @@
   .tab.active { background:var(--accent); }
 
   .main { max-width:1100px; margin:0 auto; padding:1.5rem; }
-  .hidden { display:none; }
+  .hidden { display:none !important; }   /* must beat classes like .btn that set their own display */
 
   .status-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
   .status-pill { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:600; background:var(--surface); border:2px solid var(--ink); padding:5px 11px; }
@@ -838,7 +838,8 @@ function picksRevealed(){
 
 async function loadSeason(){
   const dot = $('s-dot'), txt = $('s-text'), note = $('s-note');
-  if (SEASON.formUrl){ const f = $('s-form'); f.href = SEASON.formUrl; f.classList.remove('hidden'); }
+  const f = $('s-form');   // entries close at the deadline, so the button goes away with it
+  if (SEASON.formUrl){ f.href = SEASON.formUrl; f.classList.toggle('hidden', picksRevealed()); }
 
   if (!SEASON.sheetUrl){
     dot.className = 'status-dot pre'; txt.textContent = 'Entries open soon';
