@@ -184,10 +184,15 @@
   .track { position:relative; height:18px; background:var(--track); border:2px solid var(--ink); margin-top:7px; }
   .seg { position:absolute; top:0; bottom:0; }
   .seg-base { left:0; background:var(--accent); }
-  .seg-over { background:var(--lime); }
-  .half { position:absolute; top:3px; bottom:3px; width:1px; background:rgba(15,0,36,.25); }
+  .seg-over { background:var(--accent); }   /* same gold as the rest of the fill; the tick shows where it crossed the line */
+  /* projected wins still to come: faded gold with faint gray stripes, out to the projection */
+  .seg-proj { background:repeating-linear-gradient(-45deg, rgba(15,0,36,.06) 0 3px, transparent 3px 6px), rgba(218,174,79,.17); }
+  /* ruler: a tick every 10 wins (82 games, so 10/82 of the width) with the numbers underneath */
+  .track::after { content:''; position:absolute; left:0; right:0; bottom:0; height:5px; pointer-events:none; background-image:linear-gradient(to right, rgba(15,0,36,.35) 1px, transparent 1px); background-size:12.195% 100%; }
+  .scale { position:absolute; left:0; right:0; top:100%; pointer-events:none; }
+  .scale span { position:absolute; top:10px; transform:translateX(-50%); font-size:9px; font-weight:600; line-height:1; color:var(--muted); }
   .tick { position:absolute; top:-9px; bottom:-9px; width:4px; margin-left:-2px; background:var(--ink); }
-  .bar-foot { display:flex; justify-content:space-between; gap:8px; margin-top:10px; font-size:11px; font-weight:500; color:var(--muted); }
+  .bar-foot { display:flex; justify-content:space-between; gap:8px; margin-top:24px; font-size:11px; font-weight:500; color:var(--muted); }
   .bar-foot b { color:var(--ink); font-weight:700; }
 
   /* A pick tag is an arrow that points the way the pick goes: Unders point left,
@@ -317,7 +322,7 @@
         <p>The standings show two numbers. <b>Locked in</b> counts picks that can no longer change &mdash; an Over is locked in once the team passes the line, an Under once the team can&rsquo;t reach it. <b>On pace</b> adds the open picks that are currently tracking to win &mdash; that is, where the team&rsquo;s projected win total (ESPN&rsquo;s BPI projection, which weighs the record so far, team strength and the remaining schedule) is on the picked side of the line. Projections move with injuries and results, so on-pace picks can flip; only <b>Locked in</b> is final.</p>
         <h3>Reading the win bars</h3>
         <ul>
-          <li>Each bar fills to the team&rsquo;s current wins, out of 82. The dark tick is the win line; the bar turns green once a team passes it.</li>
+          <li>Each bar fills to the team&rsquo;s current wins, out of 82. The dark tick is the win line, and the numbers underneath count wins in tens. The faint striped stretch ahead of the solid fill is where ESPN projects the team to finish; once a team&rsquo;s line is settled, the stripes go away.</li>
           <li>Arrow tags show who picked what, and each one points the way the pick goes: <b>left-pointing tags left of the tick are Unders, right-pointing tags right of the tick are Overs.</b> A small padlock on a tag means that pick is a Lock.</li>
           <li>Tag colour is how the pick is doing: solid green or red once it&rsquo;s settled, light green or red while it&rsquo;s still open and currently on or off pace.</li>
           <li>Tap a name in the key to highlight just that person&rsquo;s picks.</li>
@@ -749,6 +754,14 @@ function consensusOf(ab, entries){
   return null;
 }
 
+// Faint striped part of the bar from current wins out to projected wins. Skipped once a
+// team is settled, when the projection no longer matters.
+function projSegs(t, pct){
+  if (t.settled || t.proj == null || t.proj <= t.w) return '';
+  const w = pct(t.w);
+  return '<div class="seg seg-proj" style="left:' + w + '%;width:' + (pct(t.proj) - w) + '%"></div>';
+}
+
 function renderTeams(ctx, revealed){
   renderLegend(ctx, revealed);
   $('consensus-filter').disabled = !revealed;     // nothing to filter on until picks are visible
@@ -813,9 +826,10 @@ function renderTeams(ctx, revealed){
       + (revealed ? '<div class="lane" style="grid-template-columns:' + linePct + '% 1fr">'
           + '<div class="lane-u">' + under + '</div><div class="lane-o">' + over + '</div></div>' : '')
       + '<div class="track" style="' + (revealed ? '' : 'margin-top:14px') + '">'
-      + '<div class="half" style="left:' + pct(GAMES / 2) + '%"></div>'
+      + '<div class="scale">' + [10, 20, 30, 40, 50, 60, 70, 80].map(n => '<span style="left:' + pct(n) + '%">' + n + '</span>').join('') + '</div>'
       + '<div class="seg seg-base" style="width:' + baseW + '%"></div>'
       + (overW ? '<div class="seg seg-over" style="left:' + linePct + '%;width:' + overW + '%"></div>' : '')
+      + projSegs(t, pct)
       + '<div class="tick" style="left:' + linePct + '%"></div></div>'
       + '<div class="bar-foot"><span>Line <b>' + t.line + '</b></span><span>' + status + '</span></div>'
       + '</div>';
