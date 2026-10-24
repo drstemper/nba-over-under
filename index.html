@@ -120,19 +120,28 @@
   .chip.cup img { width:16px; height:16px; object-fit:contain; }
   .chevron { font-size:11px; color:var(--muted); margin-left:6px; }
 
-  .expand-row td { padding:0; border-bottom:3px solid var(--ink); }
+  .expand-row > td { padding:0; border-bottom:3px solid var(--ink); }
   .expand-row:hover { background:none; }
-  .expand-inner { padding:14px 16px; background:var(--bg); }
-  .pick-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px,1fr)); gap:10px; }
-  .pick-card { background:var(--surface); border:2px solid var(--ink); padding:8px 10px; font-size:12px; font-weight:500; }
-  .pick-card.win  { background:var(--soft-win); }
-  .pick-card.loss { background:var(--soft-loss); }
-  .pick-card.live { background:var(--soft-mid); }
-  .pick-card .t { font-weight:700; text-transform:uppercase; letter-spacing:.5px; font-size:12px; display:flex; align-items:center; gap:6px; }
-  .pick-card .t img { width:18px; height:18px; object-fit:contain; }
-  .pick-card .p { margin-top:3px; }
-  .pick-card .m { color:var(--muted); margin-top:2px; }
+  .expand-inner { padding:14px 16px; background:var(--bg); position:sticky; left:0; box-sizing:border-box; }   /* width is set in JS so the panel stays in view when the table scrolls sideways */
   .lock { color:var(--ink); }
+
+  /* per-person detail (expanded row) */
+  .detail-sum { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; margin-bottom:12px; font-size:13px; font-weight:600; }
+  .detail-sum b { font-family:var(--display); font-size:1.4rem; font-weight:600; line-height:1; margin-right:3px; }
+  .detail-sum .warn { color:var(--loss-ink); font-weight:700; }
+  .dt-wrap { border:2px solid var(--ink); background:var(--surface); overflow-x:auto; }
+  .dt { font-size:13px; }
+  .dt thead th { padding:7px 10px; border-bottom:2px solid var(--ink); }
+  .dt tbody td { padding:7px 10px; }
+  .dt .tm { display:flex; align-items:center; gap:7px; font-weight:700; white-space:nowrap; }
+  .dt .tm img { width:20px; height:20px; object-fit:contain; }
+  .dt td.r, .dt th.r { text-align:right; }
+  .dt td.sub { font-weight:700; white-space:nowrap; }
+  .dt .pos { color:var(--win-ink); } .dt .neg { color:var(--loss-ink); }
+  .chip.ahead  { background:var(--soft-win); }
+  .chip.behind { background:var(--soft-loss); }
+  .chip.right { background:var(--lime); }
+  .chip.wrong { background:var(--red); }
 
   /* ===================== WIN BARS ===================== */
   .sec-head { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:.75rem; margin:.5rem 0 .9rem; }
@@ -277,7 +286,7 @@
               <option value="name">Team name</option>
               <option value="line">Win line</option>
               <option value="w">Current wins</option>
-              <option value="margin">Pace vs. line</option>
+              <option value="margin">Projection vs. line</option>
             </select>
           </label>
         </div>
@@ -305,7 +314,7 @@
           <li>Most points wins; the maximum is 36. Lines end in .5, so there are no pushes. Ties share a rank.</li>
         </ul>
         <h3>During the season</h3>
-        <p>The standings show two numbers. <b>Locked in</b> counts picks that can no longer change &mdash; an Over is locked in once the team passes the line, an Under once the team can&rsquo;t reach it. <b>On pace</b> adds the open picks that are currently tracking to win, using each team&rsquo;s win rate extended to 82 games.</p>
+        <p>The standings show two numbers. <b>Locked in</b> counts picks that can no longer change &mdash; an Over is locked in once the team passes the line, an Under once the team can&rsquo;t reach it. <b>On pace</b> adds the open picks that are currently tracking to win &mdash; that is, where the team&rsquo;s projected win total (ESPN&rsquo;s BPI projection, which weighs the record so far, team strength and the remaining schedule) is on the picked side of the line. Projections move with injuries and results, so on-pace picks can flip; only <b>Locked in</b> is final.</p>
         <h3>Reading the win bars</h3>
         <ul>
           <li>Each bar fills to the team&rsquo;s current wins, out of 82. The dark tick is the win line; the bar turns green once a team passes it.</li>
@@ -495,11 +504,46 @@ function parseSheet(text){
 }
 
 /* ============================================================
+   PROJECTED WINS
+   "On pace" / "off pace" compares a team's projected final wins to its line.
+   Projection = ESPN's BPI projection (record so far + team strength + remaining
+   schedule). If ESPN's feed is down, fall back to blendWins(): the preseason line
+   counts as PACE_PRIOR games of evidence and the real record takes over as games
+   are played, so a 0-1 start isn't read as "on pace for 0 wins".
+   ============================================================ */
+const PACE_PRIOR = 20;
+function blendWins(res, line){
+  const gp = res.w + res.l;
+  return res.w + (GAMES - gp) * ((PACE_PRIOR * line / GAMES + res.w) / (PACE_PRIOR + gp));
+}
+function parseBPI(text){
+  const out = {};
+  try {
+    const d = JSON.parse(text);
+    // Column names live once at the top level; each team just carries a parallel array of values.
+    const meta = (d.categories || []).find(c => c.name === 'projections');
+    const i = meta ? meta.names.indexOf('projectedw') : -1;
+    if (i < 0) return out;
+    (d.teams || []).forEach(t => {
+      const cat = (t.categories || []).find(c => c.name === 'projections');
+      const v = cat ? cat.values[i] : null;
+      if (typeof v === 'number' && v > 0 && v <= GAMES) out[t.team.abbreviation] = v;
+    });
+  } catch(e){}
+  return out;
+}
+function projFor(ab, ctx){
+  const res = ctx.res[ab];
+  if (!res || res.w + res.l === 0) return null;
+  return ctx.bpi && ctx.bpi[ab] != null ? ctx.bpi[ab] : blendWins(res, ctx.lines[ab]);
+}
+
+/* ============================================================
    GRADING
    res = { w, l } for a team. A pick is settled ("win"/"loss") as soon as the
    outcome can no longer change, and "ahead"/"behind" while it's still open.
    ============================================================ */
-function statusFor(pick, line, res){
+function statusFor(pick, line, res, proj){
   if (!pick || !res) return 'none';
   const gp = res.w + res.l, maxW = GAMES - res.l;
   if (gp >= GAMES && res.w === line) return 'push';
@@ -508,22 +552,28 @@ function statusFor(pick, line, res){
   else if (maxW < line) settled = 'under';
   if (settled) return settled === pick ? 'win' : 'loss';
   if (!gp) return 'none';
-  const pace = res.w / gp * GAMES;
-  return (pace > line) === (pick === 'over') ? 'ahead' : 'behind';
+  if (proj == null) proj = blendWins(res, line);
+  return (proj > line) === (pick === 'over') ? 'ahead' : 'behind';
 }
 
 function calcEntry(e, ctx){
-  let locked = 0, pace = 0, correct = 0, lockHits = 0;
+  let locked = 0, pace = 0, correct = 0, lockHits = 0, wrong = 0, ahead = 0, behind = 0, idle = 0, upside = 0;
   const rows = ctx.teams.map(ab => {
     const pick = e.picks[ab], isLock = e.locks.includes(ab) && !!pick;
-    const st = statusFor(pick, ctx.lines[ab], ctx.res[ab]);
+    const st = statusFor(pick, ctx.lines[ab], ctx.res[ab], projFor(ab, ctx));
     const v = isLock ? 2 : 1;
     if (st === 'win'){ locked += v; pace += v; correct++; if (isLock) lockHits++; }
-    else if (st === 'ahead') pace += v;
+    else if (st === 'loss') wrong++;
+    else if (pick && st !== 'push'){                     // still undecided
+      upside += v;
+      if (st === 'ahead'){ pace += v; ahead++; } else if (st === 'behind') behind++; else idle++;
+    }
     return { ab, pick, isLock, st };
   });
   const cup = ctx.cup && e.cup === ctx.cup ? 3 : 0;
-  return { locked: locked + cup, pace: pace + cup, correct, lockHits, cup, rows };
+  const cupOpen = !ctx.cup && e.cup ? 3 : 0;            // Cup not decided yet: still up for grabs
+  return { locked: locked + cup, pace: pace + cup, ceiling: locked + cup + upside + cupOpen,
+           correct, lockHits, wrong, ahead, behind, idle, cup, rows };
 }
 
 function rankRows(list, key, order){
@@ -545,16 +595,46 @@ let expanded = null;   // name of the expanded entrant
 let standingsOpen = true;
 try { standingsOpen = localStorage.getItem('nbaou.standingsOpen') !== '0'; } catch(e) {}
 
-function pickCard(r, ctx){
-  const res = ctx.res[r.ab], line = ctx.lines[r.ab];
-  if (!r.pick) return '<div class="pick-card"><div class="t">' + logoImg(r.ab) + esc(r.ab) + '</div><div class="m">no pick</div></div>';
-  const rec = res ? res.w + '-' + res.l : '—';
-  const cls = {win:'win', loss:'loss', ahead:'live', behind:'live'}[r.st] || '';
-  const verdict = r.st === 'ahead' ? ' · on pace' : r.st === 'behind' ? ' · off pace' : '';
-  return '<div class="pick-card ' + cls + '">'
-    + '<div class="t">' + logoImg(r.ab) + esc(TEAM_NAME[r.ab] || r.ab) + (r.isLock ? ' <span class="lock" title="Lock">★</span>' : '') + '</div>'
-    + '<div class="p"><b>' + cap(r.pick) + '</b> ' + line + '</div>'
-    + '<div class="m">' + rec + verdict + '</div></div>';
+const ST_WORD = { win:'settled right', loss:'settled wrong', ahead:'on pace', behind:'off pace', push:'push', none:'not started' };
+
+// Every pick for one person, riskiest first: open picks by how little cushion they have
+// (projected wins vs. the line, in the direction they picked), then settled ones.
+function detailPanel(x, ctx){
+  const made = x.rows.filter(r => r.pick);
+  const items = made.map(r => {
+    const res = ctx.res[r.ab], line = ctx.lines[r.ab], gp = res ? res.w + res.l : 0;
+    const proj = projFor(r.ab, ctx);
+    const cushion = proj === null ? null : (r.pick === 'over' ? proj - line : line - proj);
+    const group = r.st === 'ahead' || r.st === 'behind' ? 0 : r.st === 'none' || r.st === 'push' ? 1 : r.st === 'win' ? 2 : 3;
+    return { r, res, line, proj, cushion, group };
+  }).sort((a, b) => a.group - b.group
+    || (a.cushion === null) - (b.cushion === null) || (a.cushion || 0) - (b.cushion || 0)
+    || a.r.ab.localeCompare(b.r.ab));
+
+  const onTrack = x.correct + x.ahead;
+  const sum = '<div class="detail-sum">'
+    + '<span><b>' + onTrack + '</b>of ' + made.length + ' picks on track</span>'
+    + '<span class="chip right">' + x.correct + ' settled right</span>'
+    + '<span class="chip wrong">' + x.wrong + ' settled wrong</span>'
+    + '<span class="chip ahead">' + x.ahead + ' on pace</span>'
+    + '<span class="chip behind">' + x.behind + ' off pace</span>'
+    + (x.idle ? '<span class="chip">' + x.idle + ' not started</span>' : '')
+    + (x.out ? '<span class="warn">Can no longer finish 1st</span>' : '') + '</div>';
+
+  const body = items.map(({ r, res, line, proj, cushion }) => {
+    const chipCls = { win:'right', loss:'wrong', ahead:'ahead', behind:'behind' }[r.st] || '';
+    const cz = cushion === null ? '<span class="dim">—</span>'
+      : '<span class="' + (cushion >= 0 ? 'pos' : 'neg') + '">' + (cushion >= 0 ? '+' : '−') + Math.abs(cushion).toFixed(1) + '</span>';
+    return '<tr><td><div class="tm">' + logoImg(r.ab) + esc(TEAM_NAME[r.ab] || r.ab) + '</div></td>'
+      + '<td class="sub">' + (r.isLock ? '★ ' : '') + cap(r.pick) + ' ' + line + '</td>'
+      + '<td class="r">' + (res ? res.w + '-' + res.l : '—') + '</td>'
+      + '<td class="r">' + (proj === null ? '—' : proj.toFixed(1)) + '</td>'
+      + '<td class="r">' + cz + '</td>'
+      + '<td><span class="chip ' + chipCls + '">' + ST_WORD[r.st] + '</span></td></tr>';
+  }).join('');
+  return sum + '<div class="dt-wrap"><table class="dt"><thead><tr><th>Team</th><th>Pick</th><th class="r">Record</th><th class="r">Proj. wins</th>'
+    + '<th class="r" title="Projected wins vs. the line, in the direction picked. Negative = currently losing the pick.">Cushion</th><th>Status</th></tr></thead><tbody>'
+    + body + '</tbody></table></div>';
 }
 
 function renderStandings(ctx, title){
@@ -562,6 +642,10 @@ function renderStandings(ctx, title){
   if (!ctx.entries.length){ el.innerHTML = '<div class="card"><div class="card-header">' + title + '</div><div class="no-data">No entries yet.</div></div>'; return; }
   const list = ctx.entries.map(e => Object.assign({ e }, calcEntry(e, ctx)));
   rankRows(list, 'pace', 'locked');
+  const anySettled = list.some(x => x.correct + x.wrong > 0);   // hide the Correct column until something has settled
+  const cols = anySettled ? 7 : 6;
+  const bestFloor = Math.max(...list.map(x => x.locked));
+  list.forEach(x => x.out = x.ceiling < bestFloor);      // can't even tie the best banked total
 
   const lead = list.filter(x => x.rank === 1);
   const summary = 'Leading: ' + lead.map(x => esc(x.e.name)).join(', ') + ' · ' + lead[0].pace + ' on pace';
@@ -569,7 +653,7 @@ function renderStandings(ctx, title){
     + '<span>' + title + '</span>' + (standingsOpen ? '' : '<span class="sum">' + summary + '</span>') + '<span class="caret">▾</span></div>'
     + '<div class="scroll' + (standingsOpen ? '' : ' hidden') + '"><table><thead><tr>'
     + '<th>#</th><th>Entrant</th><th class="num">On pace</th><th class="num">Locked in</th>'
-    + '<th class="num">Correct</th><th>Locks</th><th>Cup pick</th></tr></thead><tbody>';
+    + (anySettled ? '<th class="num" title="Settled picks that came out right, out of picks settled so far">Correct</th>' : '') + '<th>Locks</th><th>Cup pick</th></tr></thead><tbody>';
   list.forEach(x => {
     const lockChips = x.e.locks.map(ab => {
       const r = x.rows.find(q => q.ab === ab);
@@ -584,16 +668,17 @@ function renderStandings(ctx, title){
       + '<td class="rank rank-' + x.rank + '">' + (x.tied ? 'T' : '') + x.rank + '</td>'
       + '<td><div class="entry-name">' + esc(x.e.name) + '<span class="chevron">' + (open ? '▲' : '▼') + '</span></div></td>'
       + '<td class="num">' + x.pace + '</td><td class="num">' + x.locked + '</td>'
-      + '<td class="num">' + x.correct + '/' + ctx.teams.length + '</td>'
+      + (anySettled ? '<td class="num">' + x.correct + '/' + (x.correct + x.wrong) + '</td>' : '')
       + '<td><div class="chips">' + lockChips + '</div></td>'
       + '<td>' + cupChip + '</td></tr>';
     if (open){
-      html += '<tr class="expand-row"><td colspan="7"><div class="expand-inner"><div class="pick-grid">'
-        + x.rows.map(r => pickCard(r, ctx)).join('') + '</div></div></td></tr>';
+      html += '<tr class="expand-row"><td colspan="' + cols + '"><div class="expand-inner">' + detailPanel(x, ctx) + '</div></td></tr>';
     }
   });
   html += '</tbody></table></div></div>';
   el.innerHTML = html;
+  const sc = el.querySelector('.scroll'), ei = el.querySelector('.expand-inner');
+  if (ei) ei.style.width = sc.clientWidth + 'px';
   el.querySelectorAll('.entry-row').forEach(tr => tr.onclick = () => {
     expanded = expanded === tr.dataset.name ? null : tr.dataset.name;
     renderStandings(ctx, title);
@@ -670,7 +755,7 @@ function renderTeams(ctx, revealed){
 
   const rows = ctx.teams.map(ab => {
     const r = ctx.res[ab] || { w: 0, l: 0 }, line = ctx.lines[ab];
-    const gp = r.w + r.l, proj = gp ? r.w / gp * GAMES : null;
+    const gp = r.w + r.l, proj = projFor(ab, ctx);
     // Settled = the line is decided whichever way anyone picked.
     const settled = statusFor('over', line, r) === 'win' || statusFor('under', line, r) === 'win';
     return { ab, name: TEAM_NAME[ab], line, w: r.w, l: r.l, gp, proj, res: r, settled,
@@ -707,7 +792,7 @@ function renderTeams(ctx, revealed){
     if (revealed){
       const mk = side => ctx.entries.filter(e => e.picks[t.ab] === side)
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map(e => badge(e, side, statusFor(side, t.line, t.res), e.locks.includes(t.ab))).join('');
+        .map(e => badge(e, side, statusFor(side, t.line, t.res, t.proj), e.locks.includes(t.ab))).join('');
       under = mk('under'); over = mk('over');
     }
 
@@ -716,7 +801,7 @@ function renderTeams(ctx, revealed){
     const status = !t.gp ? 'Season hasn’t started'
       : overHit ? '<b>Over hit</b> — passed ' + t.line
       : underHit ? '<b>Under hit</b> — can’t reach ' + t.line
-      : 'On pace for <b>' + t.proj.toFixed(1) + '</b> wins' + (t.gp < 20 ? ' *' : '');
+      : 'Projected <b>' + t.proj.toFixed(1) + '</b> wins';
 
     const stamp = !t.cons ? ''
       : t.cons.kind === 'wolf' ? '<span class="stamp wolf" title="' + esc(t.cons.who.name) + ' is the only one on the ' + cap(t.cons.side) + '">Lone wolf · ' + esc(t.cons.who.name) + '</span>'
@@ -736,14 +821,16 @@ function renderTeams(ctx, revealed){
       + '</div>';
   });
   html += '</div>';
-  if (shown.some(t => t.gp && t.gp < 20)) html += '<p class="help dim" style="margin:-.5rem 0 1rem;">* Early in the season — the pace is a small-sample guess.</p>';
+  if (shown.some(t => t.gp)) html += '<p class="help dim" style="margin:-.5rem 0 1rem;">' + (ctx.bpi
+    ? 'Projected wins are ESPN’s BPI projection: the record so far plus team strength and the remaining schedule.'
+    : 'ESPN’s projections are unavailable, so projected wins are estimated from the preseason line and the record so far.') + '</p>';
   $('s-teams').innerHTML = html;
 }
 
 /* ============================================================
    SEASON
    ============================================================ */
-const seasonCtx = { cup: SEASON.cupWinner, entries: [], teams: [], lines: {}, res: {} };
+const seasonCtx = { cup: SEASON.cupWinner, entries: [], teams: [], lines: {}, res: {}, bpi: null };
 
 function picksRevealed(){
   return !!SEASON.deadline && Date.now() >= Date.parse(SEASON.deadline);
@@ -760,9 +847,10 @@ async function loadSeason(){
     return;
   }
 
-  const [sheetText, standingsText] = await Promise.all([
+  const [sheetText, standingsText, bpiText] = await Promise.all([
     fetchText(SEASON.sheetUrl, true),
-    fetchText('https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=' + SEASON.espnYear + '&level=3&seasontype=2')   // 2 = regular season; the default is preseason until opening night
+    fetchText('https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=' + SEASON.espnYear + '&level=3&seasontype=2'),   // 2 = regular season; the default is preseason until opening night
+    fetchText('https://site.api.espn.com/apis/fitt/v3/sports/basketball/nba/powerindex?season=' + SEASON.espnYear)
   ]);
 
   const parsed = parseSheet(sheetText);
@@ -787,6 +875,9 @@ async function loadSeason(){
       walk(JSON.parse(standingsText));
     } catch(e){}
   }
+
+  const bpi = bpiText ? parseBPI(bpiText) : {};
+  seasonCtx.bpi = Object.keys(bpi).length >= 20 ? bpi : null;   // need (nearly) every team, else use the fallback for all
 
   const gp = Object.values(seasonCtx.res).reduce((s, r) => s + r.w + r.l, 0);
   const revealed = picksRevealed();
